@@ -1,0 +1,7 @@
+doxa>   1: {'X': 7}
+doxa>   1: {'X': 7}
+doxa>   1: {'X': 5}
+doxa>   1: {'X': 5}
+doxa>   1: {'Y': 7}
+doxa>   1: {'A': 10}
+doxa>   Goodbye.

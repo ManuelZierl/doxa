@@ -1,0 +1,8 @@
+pred flag/2.
+flag(active, true).
+flag(inactive, false).
+flag(pending, false).
+?- flag(X, true).
+?- flag(X, false).
+?- flag(X, V).
+/- exit

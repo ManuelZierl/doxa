@@ -1,0 +1,11 @@
+﻿pred social/1.
+pred step/2.
+pred req/2.
+pred fam/1.
+social(s1).
+step(s1, gov).
+req(s1, r1).
+fam(r1).
+?- social(S), req(S, R), fam(R).
+?- social(S), req(S, R), fam(R), step(S, gov).
+/- exit

@@ -1,0 +1,6 @@
+doxa>   1: {'R': 3.5}
+doxa>   1: {'R': 3}
+doxa>   1: {'R': 0.25}
+doxa>   1: {'R': 4}
+doxa>   1: {'R': 4.5}
+doxa>   Goodbye.

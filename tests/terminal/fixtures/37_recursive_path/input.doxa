@@ -1,0 +1,14 @@
+pred edge/2.
+pred path/2.
+edge(a, b).
+edge(b, c).
+edge(c, d).
+edge(d, e).
+path(X, Y) :- edge(X, Y).
+path(X, Y) :- edge(X, Z), path(Z, Y).
+?- path(a, e).
+?- path(a, Y) @{distinct:true}.
+?- path(b, Y) @{distinct:true}.
+?- path(a, c).
+?- path(e, X).
+/- exit

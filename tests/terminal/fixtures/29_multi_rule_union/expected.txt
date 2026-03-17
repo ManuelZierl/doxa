@@ -1,0 +1,18 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: {'X': 'rex'}
+  2: {'X': 'buddy'}
+  3: {'X': 'whiskers'}
+  4: {'X': 'tweety'}
+doxa>   1: {'X': 'whiskers'}
+  2: {'X': 'tweety'}
+doxa>   Goodbye.

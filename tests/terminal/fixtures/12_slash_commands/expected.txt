@@ -1,0 +1,12 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa> pred item/1.
+item(x).
+item(y).
+doxa>   Predicates (1):
+    pred item/1
+  Belief records (2):
+    item(x)
+    item(y)
+doxa>   Goodbye.

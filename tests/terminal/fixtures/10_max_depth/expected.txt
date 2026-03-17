@@ -1,0 +1,12 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: {'Y': 'b'}
+  2: {'Y': 'c'}
+  3: {'Y': 'd'}
+doxa>   No results.
+doxa>   Goodbye.

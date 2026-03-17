@@ -1,0 +1,5 @@
+pred event/1.
+event(launch) @{vf:"2024-01-01", vt:"2024-12-31"}.
+?- event(X) @{asof:"2024-06-15"}.
+?- event(X) @{asof:"2025-01-01"}.
+/- exit

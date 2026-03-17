@@ -1,0 +1,11 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: {'X': 'active'}
+doxa>   1: {'X': 'inactive'}
+  2: {'X': 'pending'}
+doxa>   1: {'X': 'active', 'V': True}
+  2: {'X': 'inactive', 'V': False}
+  3: {'X': 'pending', 'V': False}
+doxa>   Goodbye.

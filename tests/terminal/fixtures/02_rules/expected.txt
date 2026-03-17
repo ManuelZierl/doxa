@@ -1,0 +1,9 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: {'Y': 'bob'}
+  2: {'Y': 'ann'}
+doxa>   Goodbye.

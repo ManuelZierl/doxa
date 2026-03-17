@@ -1,0 +1,5 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Parse error: Invalid predicate declaration. Expected 'pred <name>/<arity>' or 'pred <name>/<arity> @{description:"..."}'.
+doxa>   1: {'X': 'yes'}
+doxa>   Goodbye.

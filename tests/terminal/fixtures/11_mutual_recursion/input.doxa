@@ -1,0 +1,8 @@
+pred a/1.
+pred b/1.
+a(X) :- b(X).
+b(X) :- a(X).
+a(base).
+?- a(X) @{distinct:true}.
+?- b(X) @{distinct:true}.
+/- exit

@@ -1,0 +1,10 @@
+pred chain/2.
+pred reach/2.
+chain(a, b).
+chain(b, c).
+chain(c, d).
+reach(X, Y) :- chain(X, Y).
+reach(X, Y) :- chain(X, Z), reach(Z, Y).
+?- reach(a, Y) @{max_depth:5}.
+?- reach(a, d) @{max_depth:1}.
+/- exit

@@ -1,0 +1,12 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: {'Name': 'dan', 'S': 60}
+  2: {'Name': 'bob', 'S': 75}
+  3: {'Name': 'alice', 'S': 90}
+  4: {'Name': 'carol', 'S': 90}
+doxa>   1: {'Name': 'bob', 'S': 75}
+  2: {'Name': 'alice', 'S': 90}
+doxa>   Goodbye.

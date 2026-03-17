@@ -1,0 +1,5 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: {'X': 42}
+doxa>   1: {'Y': 7}
+doxa>   Goodbye.
