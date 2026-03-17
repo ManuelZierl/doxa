@@ -161,12 +161,6 @@ def _contains_top_level_rule_operator(inp: str) -> bool:
     return False
 
 
-def _is_sig_statement(inp: str) -> bool:
-    """Check if the statement is a sig() declaration."""
-    s = inp.strip()
-    return s.startswith("sig(")
-
-
 class Branch(Base, AuditMixin):
     kind: Literal[BaseKind.branch] = Field(...)
     name: str = Field(
@@ -205,22 +199,22 @@ class Branch(Base, AuditMixin):
         description="Canonical entities stored in this branch.",
     )
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         statements: list[str] = []
 
         for pred in self.predicates:
-            statements.append(f"{pred.to_ax()}.")
+            statements.append(f"{pred.to_doxa()}.")
         for rec in self.belief_records:
-            statements.append(f"{rec.to_ax()}.")
+            statements.append(f"{rec.to_doxa()}.")
         for rule in self.rules:
-            statements.append(f"{rule.to_ax()}.")
+            statements.append(f"{rule.to_doxa()}.")
         for constraint in self.constraints:
-            statements.append(f"{constraint.to_ax()}.")
+            statements.append(f"{constraint.to_doxa()}.")
 
         return "\n".join(statements)
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Branch":
+    def from_doxa(cls, inp: str) -> "Branch":
         if not isinstance(inp, str):
             raise TypeError("Branch input must be a string.")
 
@@ -247,30 +241,29 @@ class Branch(Base, AuditMixin):
             stripped = stmt.strip()
 
             if stripped.startswith("pred "):
-                pred = Predicate.from_ax(stripped)
+                pred = Predicate.from_doxa(stripped)
                 key = (pred.name, pred.arity)
                 if key not in pred_map:
                     pred_map[key] = pred
                     predicates.append(pred)
-            elif _is_sig_statement(stripped):
-                # sig() expands to multiple constraints
-                expanded_constraints = Constraint.from_ax_multi(stripped)
-                for constraint in expanded_constraints:
-                    constraints.append(constraint)
-                    cls._collect_entities_from_constraint(constraint, ent_map)
-                    cls._collect_predicates_from_constraint(constraint, pred_map)
+                    # Generate type-checking constraints if type_list is present
+                    type_constraints = pred.generate_type_constraints()
+                    for constraint in type_constraints:
+                        constraints.append(constraint)
+                        cls._collect_entities_from_constraint(constraint, ent_map)
+                        cls._collect_predicates_from_constraint(constraint, pred_map)
             elif stripped.startswith("!:-"):
-                constraint = Constraint.from_ax(stripped)
+                constraint = Constraint.from_doxa(stripped)
                 constraints.append(constraint)
                 cls._collect_entities_from_constraint(constraint, ent_map)
                 cls._collect_predicates_from_constraint(constraint, pred_map)
             elif _contains_top_level_rule_operator(stripped):
-                rule = Rule.from_ax(stripped)
+                rule = Rule.from_doxa(stripped)
                 rules.append(rule)
                 cls._collect_entities_from_rule(rule, ent_map)
                 cls._collect_predicates_from_rule(rule, pred_map)
             else:
-                record = BeliefRecord.from_ax(stripped)
+                record = BeliefRecord.from_doxa(stripped)
                 belief_records.append(record)
                 cls._collect_entities_from_belief_record(record, ent_map)
                 key = (record.pred_name, record.pred_arity)
@@ -387,7 +380,7 @@ class Branch(Base, AuditMixin):
         Deduplication strategy:
           - Predicates: keyed by (name, arity)
           - Entities:   keyed by name
-          - BeliefRecords, Rules, Constraints: keyed by their to_ax() text
+          - BeliefRecords, Rules, Constraints: keyed by their to_doxa() text
         """
         pred_map: Dict[tuple[str, int], "Predicate"] = {
             (p.name, p.arity): p for p in self.predicates
@@ -402,19 +395,19 @@ class Branch(Base, AuditMixin):
             if e.name not in ent_map:
                 ent_map[e.name] = e
 
-        existing_br = {r.to_ax() for r in self.belief_records}
+        existing_br = {r.to_doxa() for r in self.belief_records}
         merged_brs = list(self.belief_records) + [
-            r for r in other.belief_records if r.to_ax() not in existing_br
+            r for r in other.belief_records if r.to_doxa() not in existing_br
         ]
 
-        existing_rules = {r.to_ax() for r in self.rules}
+        existing_rules = {r.to_doxa() for r in self.rules}
         merged_rules = list(self.rules) + [
-            r for r in other.rules if r.to_ax() not in existing_rules
+            r for r in other.rules if r.to_doxa() not in existing_rules
         ]
 
-        existing_constraints = {c.to_ax() for c in self.constraints}
+        existing_constraints = {c.to_doxa() for c in self.constraints}
         merged_constraints = list(self.constraints) + [
-            c for c in other.constraints if c.to_ax() not in existing_constraints
+            c for c in other.constraints if c.to_doxa() not in existing_constraints
         ]
 
         return self.model_copy(
@@ -428,7 +421,7 @@ class Branch(Base, AuditMixin):
         )
 
 
-# print(Branch.from_ax(
+# print(Branch.from_doxa(
 #     """
 #
 # pred name/2 @{description:"name(E, NameStr): human-readable label for entity E"}.

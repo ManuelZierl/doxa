@@ -95,7 +95,7 @@ def _run_query(state: TerminalState, text: str) -> None:
     # Strip trailing dot if present
     q_text = text.rstrip(".").strip()
     try:
-        query = Query.from_ax(q_text)
+        query = Query.from_doxa(q_text)
     except Exception as exc:
         print(f"  Parse error: {exc}")
         return
@@ -126,17 +126,17 @@ def _run_query(state: TerminalState, text: str) -> None:
 
 
 def _echo_query(query) -> None:
-    print(f"  Query parsed: {query.to_ax()}")
+    print(f"  Query parsed: {query.to_doxa()}")
 
 
 def _add_to_branch(state: TerminalState, text: str) -> None:
     """Parse and merge Doxa statements into the branch."""
-    # Ensure text is dot-terminated for Branch.from_ax
+    # Ensure text is dot-terminated for Branch.from_doxa
     clean = text.strip()
     if not clean.endswith("."):
         clean += "."
     try:
-        new_branch = Branch.from_ax(clean)
+        new_branch = Branch.from_doxa(clean)
     except Exception as exc:
         print(f"  Parse error: {exc}")
         return

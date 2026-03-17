@@ -24,11 +24,11 @@ subject_to_due_diligence(lksg, C, 2027) :-
     geq(T, 150000000).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Query with inline assumptions (fully ground goals)
-    query = Query.from_ax(
+    query = Query.from_doxa(
         "?- has_employee_count(my_company, 1200), "
         "has_net_turnover(my_company, 500000000), "
         "subject_to_due_diligence(lksg, my_company, Y)"
@@ -56,11 +56,11 @@ subject_to_due_diligence(lksg, C, 2024) :-
     geq(E, 1000).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # First query with inline assumptions
-    query1 = Query.from_ax(
+    query1 = Query.from_doxa(
         "?- has_employee_count(my_company, 1200), "
         "has_net_turnover(my_company, 500000000), "
         "subject_to_due_diligence(lksg, my_company, Y)"
@@ -73,7 +73,7 @@ subject_to_due_diligence(lksg, C, 2024) :-
 
     # Second query trying to look up the inline assumption
     # This should fail because the inline assumption was temporary
-    query2 = Query.from_ax("?- has_employee_count(my_company, X)")
+    query2 = Query.from_doxa("?- has_employee_count(my_company, X)")
     results2 = engine.evaluate(branch, query2)
 
     # Should have no results - the inline assumption was not persisted
@@ -93,11 +93,11 @@ has_employee_count(company_a, 1000).
 has_employee_count(company_b, 2000).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Query with variables - should do KB lookup
-    query = Query.from_ax("?- has_employee_count(C, E)")
+    query = Query.from_doxa("?- has_employee_count(C, E)")
     results = engine.evaluate(branch, query)
 
     # Should find the two facts in the KB
@@ -116,11 +116,11 @@ pred check_value/2.
 check_value(X, V) :- has_value(X, V), geq(V, 100).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Test with integer literal
-    query = Query.from_ax("?- has_value(item1, 150), check_value(item1, V)")
+    query = Query.from_doxa("?- has_value(item1, 150), check_value(item1, V)")
     results = engine.evaluate(branch, query)
 
     assert results.success
@@ -137,11 +137,11 @@ subject_to_due_diligence(lksg, company_over_3000_employees, 2023).
 subject_to_due_diligence(lksg, company_over_1000_employees, 2024).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Traditional query with variables
-    query = Query.from_ax("?- subject_to_due_diligence(lksg, C, Year)")
+    query = Query.from_doxa("?- subject_to_due_diligence(lksg, C, Year)")
     results = engine.evaluate(branch, query)
 
     assert results.success
@@ -162,11 +162,11 @@ q(x, 10).
 q(y, 20).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Query with multiple _ - each should be independent
-    query = Query.from_ax("?- p(_, X), q(_, Y)")
+    query = Query.from_doxa("?- p(_, X), q(_, Y)")
     results = engine.evaluate(branch, query)
 
     # Should get all combinations: 2 p facts × 2 q facts = 4 results
@@ -205,11 +205,11 @@ is_large_company(C) :-
     geq(T, 50000000).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Query with a variable C (was broken before skolemization fix)
-    query_var = Query.from_ax(
+    query_var = Query.from_doxa(
         "?- has_employee_count(C, 1200), "
         "has_net_turnover(C, 60000000), "
         "is_large_company(C)"
@@ -217,7 +217,7 @@ is_large_company(C) :-
     results_var = engine.evaluate(branch, query_var)
 
     # Query with a concrete entity name (always worked)
-    query_ent = Query.from_ax(
+    query_ent = Query.from_doxa(
         "?- has_employee_count(acme, 1200), "
         "has_net_turnover(acme, 60000000), "
         "is_large_company(acme)"
@@ -243,11 +243,11 @@ has_employee_count(company_a, 500).
 has_employee_count(company_b, 3000).
 """
 
-    branch = Branch.from_ax(kb_text)
+    branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
     # Pure lookup query — C and E are variables, no IDB goals
-    query = Query.from_ax("?- has_employee_count(C, E)")
+    query = Query.from_doxa("?- has_employee_count(C, E)")
     results = engine.evaluate(branch, query)
 
     assert results.success
@@ -256,7 +256,7 @@ has_employee_count(company_b, 3000).
     assert companies == {"company_a", "company_b"}
 
     # Single-variable lookup with one ground arg — still a query, not an assumption
-    query2 = Query.from_ax("?- has_employee_count(company_a, X)")
+    query2 = Query.from_doxa("?- has_employee_count(company_a, X)")
     results2 = engine.evaluate(branch, query2)
 
     assert results2.success

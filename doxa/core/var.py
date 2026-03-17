@@ -16,11 +16,11 @@ class Var(Base):
         ..., description="Variable identifier in rule/constraint patterns."
     )
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Var":
+    def from_doxa(cls, inp: str) -> "Var":
         return cls(kind=BaseKind.var, name=inp)
 
     @field_validator("name")

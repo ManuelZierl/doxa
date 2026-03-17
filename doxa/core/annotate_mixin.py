@@ -49,7 +49,7 @@ class AnnotateMixin(DescriptionMixin):
         description="Optional human readable name",
     )
 
-    def to_ax_annotation(self) -> str:
+    def to_doxa_annotation(self) -> str:
         parts: List[str] = []
 
         for key, value in self.model_dump().items():
@@ -73,7 +73,7 @@ class AnnotateMixin(DescriptionMixin):
         return "@{" + ", ".join(parts) + "}"
 
     @classmethod
-    def from_ax_annotation(cls, inp: str) -> "AnnotateMixin":
+    def from_doxa_annotation(cls, inp: str) -> "AnnotateMixin":
         raw = parse_ax_annotation(inp)
         allowed = {"b", "d", "src", "et", "vf", "vt", "name", "description"}
         unknown = set(raw) - allowed

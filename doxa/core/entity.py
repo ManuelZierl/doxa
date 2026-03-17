@@ -16,11 +16,11 @@ class Entity(Base):
 
     name: str = Field(..., description="Entity identifier/symbol in the AX language.")
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Entity":
+    def from_doxa(cls, inp: str) -> "Entity":
         return cls(kind=BaseKind.entity, name=inp)
 
     @field_validator("name")

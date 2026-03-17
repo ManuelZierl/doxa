@@ -13,18 +13,18 @@ from doxa.query import QueryEngine
 
 def test_entity_roundtrip():
     e = Entity(kind=BaseKind.entity, name="alice")
-    assert e.to_ax() == "alice"
-    assert Entity.from_ax("alice").name == "alice"
+    assert e.to_doxa() == "alice"
+    assert Entity.from_doxa("alice").name == "alice"
 
 
 def test_predicate_roundtrip():
     p = Predicate(kind=BaseKind.predicate, name="parent", arity=2)
-    assert p.to_ax() == "pred parent/2"
+    assert p.to_doxa() == "pred parent/2"
 
 
-def test_branch_from_ax():
+def test_branch_from_doxa():
     ax_src = "parent(alice, bob)."
-    branch = Branch.from_ax(ax_src)
+    branch = Branch.from_doxa(ax_src)
     assert len(branch.belief_records) == 1
     assert branch.belief_records[0].pred_name == "parent"
 
@@ -33,7 +33,7 @@ def test_in_memory_repository():
     repo = InMemoryBranchRepository()
     assert repo.list_names() == []
 
-    branch = Branch.from_ax("person(alice).")
+    branch = Branch.from_doxa("person(alice).")
     repo.save(branch)
     assert repo.list_names() == ["main"]
 

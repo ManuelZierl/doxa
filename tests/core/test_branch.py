@@ -7,8 +7,8 @@ from doxa.core.constraint import Constraint
 from doxa.core.rule import Rule
 
 
-def test_branch_from_ax_parses_single_belief_record() -> None:
-    branch = Branch.from_ax("parent(thomas, manuel).")
+def test_branch_from_doxa_parses_single_belief_record() -> None:
+    branch = Branch.from_doxa("parent(thomas, manuel).")
 
     assert branch.kind == BaseKind.branch
     assert branch.name == "main"
@@ -20,8 +20,8 @@ def test_branch_from_ax_parses_single_belief_record() -> None:
     assert isinstance(branch.belief_records[0], BeliefRecord)
 
 
-def test_branch_from_ax_parses_single_rule() -> None:
-    branch = Branch.from_ax("ancestor(X, Y) :- parent(X, Y).")
+def test_branch_from_doxa_parses_single_rule() -> None:
+    branch = Branch.from_doxa("ancestor(X, Y) :- parent(X, Y).")
 
     assert len(branch.belief_records) == 0
     assert len(branch.rules) == 1
@@ -29,8 +29,8 @@ def test_branch_from_ax_parses_single_rule() -> None:
     assert isinstance(branch.rules[0], Rule)
 
 
-def test_branch_from_ax_parses_single_constraint() -> None:
-    branch = Branch.from_ax("!:- ancestor(X, X).")
+def test_branch_from_doxa_parses_single_constraint() -> None:
+    branch = Branch.from_doxa("!:- ancestor(X, X).")
 
     assert len(branch.belief_records) == 0
     assert len(branch.rules) == 0
@@ -38,8 +38,8 @@ def test_branch_from_ax_parses_single_constraint() -> None:
     assert isinstance(branch.constraints[0], Constraint)
 
 
-def test_branch_from_ax_parses_mixed_statements_in_any_order() -> None:
-    branch = Branch.from_ax(
+def test_branch_from_doxa_parses_mixed_statements_in_any_order() -> None:
+    branch = Branch.from_doxa(
         """
         !:- ancestor(X, X).
         parent(thomas, manuel).
@@ -56,8 +56,10 @@ def test_branch_from_ax_parses_mixed_statements_in_any_order() -> None:
     assert isinstance(branch.constraints[0], Constraint)
 
 
-def test_branch_from_ax_parses_multiple_belief_records_rules_and_constraints() -> None:
-    branch = Branch.from_ax(
+def test_branch_from_doxa_parses_multiple_belief_records_rules_and_constraints() -> (
+    None
+):
+    branch = Branch.from_doxa(
         """
         parent(thomas, manuel).
         parent(manuel, anna).
@@ -73,8 +75,8 @@ def test_branch_from_ax_parses_multiple_belief_records_rules_and_constraints() -
     assert len(branch.constraints) == 2
 
 
-def test_branch_to_ax_serializes_all_statements_with_dots() -> None:
-    branch = Branch.from_ax(
+def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
+    branch = Branch.from_doxa(
         """
         parent(thomas, manuel).
         ancestor(X, Y) :- parent(X, Y).
@@ -82,7 +84,7 @@ def test_branch_to_ax_serializes_all_statements_with_dots() -> None:
         """
     )
 
-    out = branch.to_ax()
+    out = branch.to_doxa()
 
     assert "parent(thomas, manuel)." in out
     assert "ancestor(X, Y) :- parent(X, Y)." in out
@@ -90,8 +92,8 @@ def test_branch_to_ax_serializes_all_statements_with_dots() -> None:
 
 
 # todo: ...
-# def test_branch_to_ax_emits_canonical_grouped_order() -> None:
-#     branch = Branch.from_ax(
+# def test_branch_to_doxa_emits_canonical_grouped_order() -> None:
+#     branch = Branch.from_doxa(
 #         """
 #         !:- ancestor(X, X).
 #         parent(thomas, manuel).
@@ -99,7 +101,7 @@ def test_branch_to_ax_serializes_all_statements_with_dots() -> None:
 #         """
 #     )
 #
-#     out = branch.to_ax().splitlines()
+#     out = branch.to_doxa().splitlines()
 #
 #     assert out == [
 #         "parent(thomas, manuel).",
@@ -109,76 +111,76 @@ def test_branch_to_ax_serializes_all_statements_with_dots() -> None:
 
 
 def test_branch_round_trip_simple_program() -> None:
-    original = Branch.from_ax(
+    original = Branch.from_doxa(
         """
         parent(thomas, manuel).
         ancestor(X, Y) :- parent(X, Y).
         !:- ancestor(X, X).
         """
     )
-    reparsed = Branch.from_ax(original.to_ax())
+    reparsed = Branch.from_doxa(original.to_doxa())
 
-    assert reparsed.to_ax() == original.to_ax()
+    assert reparsed.to_doxa() == original.to_doxa()
     assert len(reparsed.belief_records) == len(original.belief_records)
     assert len(reparsed.rules) == len(original.rules)
     assert len(reparsed.constraints) == len(original.constraints)
 
 
 def test_branch_round_trip_with_annotations() -> None:
-    original = Branch.from_ax(
+    original = Branch.from_doxa(
         """
         parent(thomas, manuel) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}.
         ancestor(X, Y) :- parent(X, Y) @{name:"seed_rule", description:"seed"}.
         !:- ancestor(X, X) @{name:"no_self_ancestor", description:"integrity check"}.
         """
     )
-    reparsed = Branch.from_ax(original.to_ax())
+    reparsed = Branch.from_doxa(original.to_doxa())
 
-    assert reparsed.to_ax() == original.to_ax()
+    assert reparsed.to_doxa() == original.to_doxa()
     assert len(reparsed.belief_records) == 1
     assert len(reparsed.rules) == 1
     assert len(reparsed.constraints) == 1
 
 
-def test_branch_from_ax_rejects_non_string() -> None:
+def test_branch_from_doxa_rejects_non_string() -> None:
     with pytest.raises(TypeError, match="must be a string"):
-        Branch.from_ax(None)  # type: ignore[arg-type]
+        Branch.from_doxa(None)  # type: ignore[arg-type]
 
 
-def test_branch_from_ax_rejects_empty_input() -> None:
+def test_branch_from_doxa_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="must not be empty"):
-        Branch.from_ax("")
+        Branch.from_doxa("")
 
 
-def test_branch_from_ax_rejects_missing_statement_terminator() -> None:
+def test_branch_from_doxa_rejects_missing_statement_terminator() -> None:
     with pytest.raises(ValueError, match="must terminate each statement with"):
-        Branch.from_ax("parent(thomas, manuel)")
+        Branch.from_doxa("parent(thomas, manuel)")
 
 
-def test_branch_from_ax_rejects_empty_statement_between_dots() -> None:
+def test_branch_from_doxa_rejects_empty_statement_between_dots() -> None:
     with pytest.raises(ValueError, match="Empty AX statement"):
-        Branch.from_ax("parent(thomas, manuel)..")
+        Branch.from_doxa("parent(thomas, manuel)..")
 
 
-def test_branch_from_ax_rejects_unbalanced_parentheses() -> None:
+def test_branch_from_doxa_rejects_unbalanced_parentheses() -> None:
     with pytest.raises(ValueError, match="Unbalanced parentheses"):
-        Branch.from_ax("parent(thomas, manuel. ")
+        Branch.from_doxa("parent(thomas, manuel. ")
 
 
-def test_branch_from_ax_rejects_unterminated_quoted_string() -> None:
+def test_branch_from_doxa_rejects_unterminated_quoted_string() -> None:
     with pytest.raises(ValueError, match="Unterminated quoted string"):
-        Branch.from_ax('label(thomas, "hello).')
+        Branch.from_doxa('label(thomas, "hello).')
 
 
-def test_branch_from_ax_handles_dot_inside_double_quoted_string() -> None:
-    branch = Branch.from_ax('label(thomas, "hello.world").')
+def test_branch_from_doxa_handles_dot_inside_double_quoted_string() -> None:
+    branch = Branch.from_doxa('label(thomas, "hello.world").')
 
     assert len(branch.belief_records) == 1
-    assert branch.belief_records[0].to_ax() == 'label(thomas, "hello.world")'
+    assert branch.belief_records[0].to_doxa() == 'label(thomas, "hello.world")'
 
 
-def test_branch_from_ax_handles_multiple_lines_and_whitespace() -> None:
-    branch = Branch.from_ax(
+def test_branch_from_doxa_handles_multiple_lines_and_whitespace() -> None:
+    branch = Branch.from_doxa(
         """
 
             parent(thomas, manuel).
@@ -196,9 +198,9 @@ def test_branch_from_ax_handles_multiple_lines_and_whitespace() -> None:
 
 
 def test_branch_direct_model_construction() -> None:
-    belief = BeliefRecord.from_ax("parent(thomas, manuel)")
-    rule = Rule.from_ax("ancestor(X, Y) :- parent(X, Y)")
-    constraint = Constraint.from_ax("!:- ancestor(X, X)")
+    belief = BeliefRecord.from_doxa("parent(thomas, manuel)")
+    rule = Rule.from_doxa("ancestor(X, Y) :- parent(X, Y)")
+    constraint = Constraint.from_doxa("!:- ancestor(X, X)")
 
     branch = Branch(
         kind=BaseKind.branch,
@@ -224,68 +226,6 @@ def test_branch_round_trip_preserves_statement_text() -> None:
     ancestor(X, Y) :- parent(X, Y).
     !:- ancestor(X, X).
     """
-    reparsed = Branch.from_ax(Branch.from_ax(source).to_ax())
+    reparsed = Branch.from_doxa(Branch.from_doxa(source).to_doxa())
 
-    assert reparsed.to_ax() == Branch.from_ax(source).to_ax()
-
-
-def test_branch_from_ax_parses_sig_syntax() -> None:
-    """Test that sig() syntax is properly expanded into multiple constraints."""
-    branch = Branch.from_ax(
-        """
-        pred person/1.
-        pred parent/2.
-        
-        sig(parent, [person, person]).
-        
-        person(alice).
-        person(bob).
-        parent(alice, bob).
-        """
-    )
-
-    # Should have 2 constraints from sig expansion
-    assert len(branch.constraints) == 2
-
-    # Both constraints should be about parent predicate
-    for c in branch.constraints:
-        assert len(c.goals) == 2
-        assert c.goals[0].pred_name == "parent"
-        assert c.goals[0].pred_arity == 2
-        assert c.goals[1].pred_name == "person"
-        assert c.goals[1].pred_arity == 1
-        assert c.goals[1].negated is True
-
-    # First constraint checks X0, second checks X1
-    assert branch.constraints[0].goals[1].goal_args[0].var.name == "X0"
-    assert branch.constraints[1].goals[1].goal_args[0].var.name == "X1"
-
-    # Should have predicates for person and parent
-    pred_names = {(p.name, p.arity) for p in branch.predicates}
-    assert ("person", 1) in pred_names
-    assert ("parent", 2) in pred_names
-
-    # Should have 3 belief records
-    assert len(branch.belief_records) == 3
-
-
-def test_branch_from_ax_sig_with_three_args() -> None:
-    """Test sig syntax with three arguments."""
-    branch = Branch.from_ax(
-        """
-        sig(triple, [entity, relation, entity]).
-        """
-    )
-
-    # Should generate 3 constraints
-    assert len(branch.constraints) == 3
-
-    # Check each constraint checks a different argument
-    assert branch.constraints[0].goals[1].goal_args[0].var.name == "X0"
-    assert branch.constraints[0].goals[1].pred_name == "entity"
-
-    assert branch.constraints[1].goals[1].goal_args[0].var.name == "X1"
-    assert branch.constraints[1].goals[1].pred_name == "relation"
-
-    assert branch.constraints[2].goals[1].goal_args[0].var.name == "X2"
-    assert branch.constraints[2].goals[1].pred_name == "entity"
+    assert reparsed.to_doxa() == Branch.from_doxa(source).to_doxa()

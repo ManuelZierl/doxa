@@ -50,13 +50,13 @@ def test_entity_rejects_invalid_names(name: str) -> None:
     assert "Entity.name" in msg
 
 
-def test_entity_to_ax_returns_name() -> None:
+def test_entity_to_doxa_returns_name() -> None:
     ent = Entity(kind=BaseKind.entity, name="foo_bar")
-    assert ent.to_ax() == "foo_bar"
+    assert ent.to_doxa() == "foo_bar"
 
 
-def test_entity_from_ax_builds_entity() -> None:
-    ent = Entity.from_ax("foo_bar")
+def test_entity_from_doxa_builds_entity() -> None:
+    ent = Entity.from_doxa("foo_bar")
     assert ent.kind == BaseKind.entity
     assert ent.name == "foo_bar"
 

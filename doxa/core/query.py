@@ -9,7 +9,7 @@ from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 from doxa.core.goal import (
     Goal,
-    goal_from_ax,
+    goal_from_doxa,
 )
 from doxa.core.schema_utils import compact_schema_for_llm
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
@@ -94,7 +94,7 @@ class QueryOptions(BaseModel):
             )
         raise ValueError(f"Invalid explain value: {v!r}. Must be boolean or string.")
 
-    def to_ax_parts(self) -> List[str]:
+    def to_doxa_parts(self) -> List[str]:
         """Return a list of ``key:value`` strings for non-default options."""
         parts: List[str] = []
         dump = self.model_dump(exclude_defaults=True, exclude_none=True)
@@ -139,15 +139,15 @@ class Query(Base):
             )
         return self
 
-    def to_ax(self) -> str:
-        body = ", ".join(goal.to_ax() for goal in self.goals)
-        parts = self.options.to_ax_parts()
+    def to_doxa(self) -> str:
+        body = ", ".join(goal.to_doxa() for goal in self.goals)
+        parts = self.options.to_doxa_parts()
         if not parts:
             return f"?- {body}"
         return f"?- {body} @{{{', '.join(parts)}}}"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Query":
+    def from_doxa(cls, inp: str) -> "Query":
         if not isinstance(inp, str):
             raise TypeError("Query input must be a string.")
 
@@ -170,7 +170,7 @@ class Query(Base):
         goals: List[Goal] = []
         anon_counter = 0
         for i, part in enumerate(goal_parts):
-            goal = goal_from_ax(part)
+            goal = goal_from_doxa(part)
 
             # Rename anonymous variables (_) to unique names (_0, _1, _2, …)
             if hasattr(goal, "goal_args"):

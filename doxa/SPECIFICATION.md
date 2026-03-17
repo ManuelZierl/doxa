@@ -20,7 +20,6 @@ A Doxa program is a sequence of statements; each statement ends with `.`
 | String literal | Double quotes                   | `"hello world"`              |
 | Integer        | Plain digits                    | `42`, `-3`                   |
 | Float          | Digits with `.`                 | `1.5`, `3.14`                |
-| Boolean        |                                 | `true`, `false`              |
 
 Identifiers and predicate names must be **ASCII only**.
 String literal *values* may contain Unicode.
@@ -33,15 +32,28 @@ String literal *values* may contain Unicode.
 ### 1. Predicate Declaration
 
 ```
-pred name/arity [@{description:"..."}].
+pred name/arity [type_list] [@{description:"..."}].
 ```
 
 Must appear before the first use of the predicate.
+The optional `[type_list]` specifies argument types and automatically generates type-checking constraints.
 `description` is the **only** annotation key accepted on `pred` — any other key is a hard error.
 
 ```doxa
 pred parent/2 @{description:"parent(P,C): P is a direct parent of C"}.
 pred alive/1.
+pred employee/2 [company, person] @{description:"employee(C,P): P works for company C"}.
+```
+
+When a type list is provided, Doxa automatically generates type-checking constraints. Type-checking is always done with predicates of arity 1.
+```doxa
+pred employee/2 [company, person].
+```
+Expands to:
+```doxa
+pred employee/2.
+!:- employee(X0, X1), not company(X0).
+!:- employee(X0, X1), not person(X1).
 ```
 
 ### 2. Fact (BeliefRecord)
@@ -104,24 +116,6 @@ Retrieves bindings satisfying the body goals.
 ?- event(X) @{asof:"2024-06-15"}.
 ```
 
-### 6. Type Signature
-
-Syntactic sugar that expands to type-checking constraints — one per argument position.
-
-```
-sig(pred_name, [type1, type2, ...]).
-```
-
-```doxa
-sig(parent, [person, person]).
-```
-
-Expands to:
-```doxa
-!:- parent(X0, X1), not person(X0).
-!:- parent(X0, X1), not person(X1).
-```
-
 ---
 
 ## Annotation Keys
@@ -152,13 +146,26 @@ A body is a comma-separated list of goals. Each goal is one of:
 predicate_name(term1, ..., termN)
 ```
 
-### Negation as failure
+### Proof-level Operators
+
+#### Negation as Failure (`not`)
 ```
 not predicate_name(term1, ..., termN)
 ```
-Not valid on builtin goals.
 
-### Built-in: comparators (arity 2)
+`not` is a **proof-level operator**, not a builtin predicate. It implements negation-as-failure (NAF): `not goal` succeeds if and only if `goal` cannot be proven. This is fundamentally different from boolean negation.
+
+**Important distinctions:**
+- `not` is a reserved operator that modifies atom goals
+- `not` cannot be applied to builtin goals
+- `not` does not bind new variables — all variables in a negated goal must already be bound
+- `not` operates at the proof search level, not on boolean values
+
+### Builtins
+
+Builtins are special predicates evaluated directly by the query engine, not through rule derivation.
+
+#### Built-in: comparators (arity 2)
 
 Both arguments must be bound, except `eq` which can unify one unbound variable.
 
@@ -256,6 +263,7 @@ Interactive-mode only. Prefix is `/-`:
 - Predicate arity must be ≥ 1 — zero-arity predicate declarations are rejected.
 - Every predicate must be declared before its first use.
 - `pred` annotations accept `description` only — any other key is a parse error.
+- `pred` type lists are optional; when provided, they must match the declared arity.
 - Identifiers (predicate names, entity ids) must be ASCII only.
 - `between` does not enumerate — all three arguments must already be bound.
 - Builtin goals cannot be negated with `not`.

@@ -25,16 +25,16 @@ engine = InMemoryQueryEngine()
 
 
 def _run(kb: str, q: str) -> list[dict]:
-    branch = Branch.from_ax(kb)
-    query = Query.from_ax(q)
+    branch = Branch.from_doxa(kb)
+    query = Query.from_doxa(q)
     result = engine.evaluate(branch, query)
     return [b.values for b in result.bindings]
 
 
 def _run_opts(kb: str, q: str, **opts) -> list[dict]:
     """Run with explicit QueryOptions keyword args merged into the query."""
-    branch = Branch.from_ax(kb)
-    query = Query.from_ax(q)
+    branch = Branch.from_doxa(kb)
+    query = Query.from_doxa(q)
     query = query.model_copy(update={"options": QueryOptions(**opts)})
     result = engine.evaluate(branch, query)
     return [b.values for b in result.bindings]
@@ -82,7 +82,7 @@ class TestEqBinder:
 # Arithmetic builtins: add / sub / mul / div
 # ─────────────────────────────────────────────────────────────────────────────
 
-ARITH_KB = "p(x)."  # minimal KB so Branch.from_ax is happy
+ARITH_KB = "p(x)."  # minimal KB so Branch.from_doxa is happy
 
 
 class TestAddBuiltin:
@@ -441,8 +441,8 @@ nat(S) :- nat(P), add(P, 1, S).
         assert rows == [{}]
 
     def test_max_depth_from_query_annotation(self):
-        branch = Branch.from_ax(self.KB)
-        query = Query.from_ax("?- nat(1) @{max_depth:5}")
+        branch = Branch.from_doxa(self.KB)
+        query = Query.from_doxa("?- nat(1) @{max_depth:5}")
         result = engine.evaluate(branch, query)
         assert result.success
 
@@ -491,8 +491,8 @@ class TestPolicy:
         assert len(rows) == 5
 
     def test_policy_from_query_annotation(self):
-        branch = Branch.from_ax(POLICY_KB)
-        query = Query.from_ax('?- fact(X) @{policy:"skeptical"}')
+        branch = Branch.from_doxa(POLICY_KB)
+        query = Query.from_doxa('?- fact(X) @{policy:"skeptical"}')
         result = engine.evaluate(branch, query)
         names = {b.values["X"] for b in result.bindings}
         assert names == {"believed", "certain"}
@@ -548,28 +548,28 @@ class TestQueryOptions:
         opts = QueryOptions(limit="10")
         assert opts.limit == 10
 
-    def test_to_ax_parts_only_non_defaults(self):
+    def test_to_doxa_parts_only_non_defaults(self):
         opts = QueryOptions(policy="skeptical", limit=5)
-        parts = opts.to_ax_parts()
+        parts = opts.to_doxa_parts()
         keys = [p.split(":")[0] for p in parts]
         assert "policy" in keys
         assert "limit" in keys
         assert "offset" not in keys
         assert "distinct" not in keys
 
-    def test_to_ax_parts_empty_for_defaults(self):
+    def test_to_doxa_parts_empty_for_defaults(self):
         opts = QueryOptions()
-        assert opts.to_ax_parts() == []
+        assert opts.to_doxa_parts() == []
 
-    def test_query_from_ax_parses_options(self):
-        q = Query.from_ax('?- fact(X) @{policy:"skeptical", limit:10, offset:2}')
+    def test_query_from_doxa_parses_options(self):
+        q = Query.from_doxa('?- fact(X) @{policy:"skeptical", limit:10, offset:2}')
         assert q.options.policy == "skeptical"
         assert q.options.limit == 10
         assert q.options.offset == 2
 
-    def test_query_to_ax_roundtrip(self):
-        q = Query.from_ax('?- fact(X) @{policy:"skeptical", limit:5}')
-        ax = q.to_ax()
-        q2 = Query.from_ax(ax)
+    def test_query_to_doxa_roundtrip(self):
+        q = Query.from_doxa('?- fact(X) @{policy:"skeptical", limit:5}')
+        ax = q.to_doxa()
+        q2 = Query.from_doxa(ax)
         assert q2.options.policy == "skeptical"
         assert q2.options.limit == 5

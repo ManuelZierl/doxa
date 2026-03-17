@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _branch_to_ax(
+def _branch_to_doxa(
     state: "TerminalState",
     *,
     predicates=True,
@@ -30,16 +30,16 @@ def _branch_to_ax(
     lines: list[str] = []
     if predicates:
         for p in b.predicates:
-            lines.append(f"{p.to_ax()}.")
+            lines.append(f"{p.to_doxa()}.")
     if belief_records:
         for r in b.belief_records:
-            lines.append(f"{r.to_ax()}.")
+            lines.append(f"{r.to_doxa()}.")
     if rules:
         for r in b.rules:
-            lines.append(f"{r.to_ax()}.")
+            lines.append(f"{r.to_doxa()}.")
     if constraints:
         for c in b.constraints:
-            lines.append(f"{c.to_ax()}.")
+            lines.append(f"{c.to_doxa()}.")
     return "\n".join(lines)
 
 
@@ -59,11 +59,11 @@ def _branch_to_dict(
             for p in b.predicates
         ]
     if belief_records:
-        out["belief_records"] = [r.to_ax() for r in b.belief_records]
+        out["belief_records"] = [r.to_doxa() for r in b.belief_records]
     if rules:
-        out["rules"] = [r.to_ax() for r in b.rules]
+        out["rules"] = [r.to_doxa() for r in b.rules]
     if constraints:
-        out["constraints"] = [c.to_ax() for c in b.constraints]
+        out["constraints"] = [c.to_doxa() for c in b.constraints]
     return out
 
 
@@ -115,7 +115,7 @@ def cmd_dump(state: "TerminalState", args: list[str]) -> None:
     if fmt == "json":
         content = json.dumps(_branch_to_dict(state, **flags), indent=2)
     else:
-        content = _branch_to_ax(state, **flags)
+        content = _branch_to_doxa(state, **flags)
 
     if out_file:
         out_file.write_text(content)
@@ -357,19 +357,19 @@ def cmd_search(state: "TerminalState", args: list[str]) -> None:
         for e in hits_ent:
             print(f"    {e.name}")
 
-    hits_br = [r for r in b.belief_records if pattern in r.to_ax().lower()]
+    hits_br = [r for r in b.belief_records if pattern in r.to_doxa().lower()]
     if hits_br:
         found = True
         print(f"  Belief records ({len(hits_br)}):")
         for r in hits_br:
-            print(f"    {r.to_ax()}")
+            print(f"    {r.to_doxa()}")
 
-    hits_rules = [r for r in b.rules if pattern in r.to_ax().lower()]
+    hits_rules = [r for r in b.rules if pattern in r.to_doxa().lower()]
     if hits_rules:
         found = True
         print(f"  Rules ({len(hits_rules)}):")
         for r in hits_rules:
-            print(f"    {r.to_ax()}")
+            print(f"    {r.to_doxa()}")
 
     if not found:
         print(f"  No matches for {pattern!r}.")
@@ -508,7 +508,7 @@ def _fix_nested_kinds(obj, parent_context=None):
 # ── file loading helper (also used by load command) ──────────────────────────
 
 
-def _load_file(path: Path, fix_missing_kinds: bool = False) -> 'Branch':
+def _load_file(path: Path, fix_missing_kinds: bool = False) -> "Branch":
     from doxa.core.branch import Branch
     import json as json_module
     from pydantic import ValidationError
@@ -549,7 +549,7 @@ def _load_file(path: Path, fix_missing_kinds: bool = False) -> 'Branch':
             return Branch.model_validate_json(text)
     else:
         # Treat as .doxa
-        return Branch.from_ax(text)
+        return Branch.from_doxa(text)
 
 
 # ── dispatch table ────────────────────────────────────────────────────────────
