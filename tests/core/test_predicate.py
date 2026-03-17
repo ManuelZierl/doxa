@@ -6,8 +6,8 @@ from doxa.core.base_kinds import BaseKind
 from doxa.core.predicate import Predicate
 
 
-def test_predicate_from_ax_parses_without_annotation() -> None:
-    pred = Predicate.from_ax("pred parent/2")
+def test_predicate_from_doxa_parses_without_annotation() -> None:
+    pred = Predicate.from_doxa("pred parent/2")
 
     assert pred.kind == BaseKind.predicate
     assert pred.name == "parent"
@@ -15,8 +15,8 @@ def test_predicate_from_ax_parses_without_annotation() -> None:
     assert pred.description is None
 
 
-def test_predicate_from_ax_parses_with_description_annotation() -> None:
-    pred = Predicate.from_ax(
+def test_predicate_from_doxa_parses_with_description_annotation() -> None:
+    pred = Predicate.from_doxa(
         'pred source_document/1 @{description:"source_document(S): provenance source entity"}'
     )
 
@@ -26,22 +26,22 @@ def test_predicate_from_ax_parses_with_description_annotation() -> None:
     assert pred.description == "source_document(S): provenance source entity"
 
 
-def test_predicate_from_ax_parses_description_with_escaped_quotes() -> None:
-    pred = Predicate.from_ax('pred quoted/1 @{description:"say \\"hello\\""}')
+def test_predicate_from_doxa_parses_description_with_escaped_quotes() -> None:
+    pred = Predicate.from_doxa('pred quoted/1 @{description:"say \\"hello\\""}')
 
     assert pred.name == "quoted"
     assert pred.arity == 1
     assert pred.description == 'say "hello"'
 
 
-def test_predicate_from_ax_rejects_empty_input() -> None:
+def test_predicate_from_doxa_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="must not be empty"):
-        Predicate.from_ax("")
+        Predicate.from_doxa("")
 
 
-def test_predicate_from_ax_rejects_non_string_input() -> None:
+def test_predicate_from_doxa_rejects_non_string_input() -> None:
     with pytest.raises(TypeError, match="must be a string"):
-        Predicate.from_ax(None)  # type: ignore[arg-type]
+        Predicate.from_doxa(None)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -59,36 +59,36 @@ def test_predicate_from_ax_rejects_non_string_input() -> None:
         "pred parent/2.",
     ],
 )
-def test_predicate_from_ax_rejects_invalid_declarations(inp: str) -> None:
+def test_predicate_from_doxa_rejects_invalid_declarations(inp: str) -> None:
     with pytest.raises(ValueError, match="Invalid predicate declaration"):
-        Predicate.from_ax(inp)
+        Predicate.from_doxa(inp)
 
 
-def test_predicate_from_ax_rejects_unsupported_annotation_keys() -> None:
+def test_predicate_from_doxa_rejects_unsupported_annotation_keys() -> None:
     with pytest.raises(ValueError, match="only allow"):
-        Predicate.from_ax("pred parent/2 @{b:0.9}")
+        Predicate.from_doxa("pred parent/2 @{b:0.9}")
 
 
-def test_predicate_from_ax_rejects_mixed_supported_and_unsupported_annotation_keys() -> (
+def test_predicate_from_doxa_rejects_mixed_supported_and_unsupported_annotation_keys() -> (
     None
 ):
     with pytest.raises(ValueError, match="unsupported keys"):
-        Predicate.from_ax(
+        Predicate.from_doxa(
             'pred parent/2 @{description:"Parent relation", src:registry_2020}'
         )
 
 
-def test_predicate_to_ax_without_description() -> None:
+def test_predicate_to_doxa_without_description() -> None:
     pred = Predicate(
         kind=BaseKind.predicate,
         name="parent",
         arity=2,
     )
 
-    assert pred.to_ax() == "pred parent/2"
+    assert pred.to_doxa() == "pred parent/2"
 
 
-def test_predicate_to_ax_with_description() -> None:
+def test_predicate_to_doxa_with_description() -> None:
     pred = Predicate(
         kind=BaseKind.predicate,
         name="source_document",
@@ -97,12 +97,12 @@ def test_predicate_to_ax_with_description() -> None:
     )
 
     assert (
-        pred.to_ax()
+        pred.to_doxa()
         == 'pred source_document/1 @{description:"source_document(S): provenance source entity"}'
     )
 
 
-def test_predicate_to_ax_escapes_quotes_and_backslashes() -> None:
+def test_predicate_to_doxa_escapes_quotes_and_backslashes() -> None:
     pred = Predicate(
         kind=BaseKind.predicate,
         name="quoted",
@@ -110,7 +110,9 @@ def test_predicate_to_ax_escapes_quotes_and_backslashes() -> None:
         description='path C:\\tmp says "hi"',
     )
 
-    assert pred.to_ax() == 'pred quoted/1 @{description:"path C:\\\\tmp says \\"hi\\""}'
+    assert (
+        pred.to_doxa() == 'pred quoted/1 @{description:"path C:\\\\tmp says \\"hi\\""}'
+    )
 
 
 def test_predicate_round_trip_without_description() -> None:
@@ -120,7 +122,7 @@ def test_predicate_round_trip_without_description() -> None:
         arity=2,
     )
 
-    reparsed = Predicate.from_ax(original.to_ax())
+    reparsed = Predicate.from_doxa(original.to_doxa())
 
     assert reparsed == original
 
@@ -133,7 +135,7 @@ def test_predicate_round_trip_with_description() -> None:
         description='source_document(S): provenance source entity for "facts"',
     )
 
-    reparsed = Predicate.from_ax(original.to_ax())
+    reparsed = Predicate.from_doxa(original.to_doxa())
 
     assert reparsed == original
 
@@ -169,7 +171,7 @@ def test_predicate_direct_model_rejects_negative_arity() -> None:
 
 def test_predicate_with_type_list_parsing() -> None:
     """Test parsing predicate with type list."""
-    pred = Predicate.from_ax("pred parent/2 [person, person]")
+    pred = Predicate.from_doxa("pred parent/2 [person, person]")
 
     assert pred.name == "parent"
     assert pred.arity == 2
@@ -179,7 +181,7 @@ def test_predicate_with_type_list_parsing() -> None:
 
 def test_predicate_with_type_list_and_description() -> None:
     """Test parsing predicate with both type list and description."""
-    pred = Predicate.from_ax(
+    pred = Predicate.from_doxa(
         'pred employee/2 [company, person] @{description:"employment relation"}'
     )
 
@@ -189,24 +191,26 @@ def test_predicate_with_type_list_and_description() -> None:
     assert pred.description == "employment relation"
 
 
-def test_predicate_type_list_to_ax() -> None:
+def test_predicate_type_list_to_doxa() -> None:
     """Test serialization of predicate with type list."""
-    pred = Predicate.from_ax("pred parent/2 [person, person]")
+    pred = Predicate.from_doxa("pred parent/2 [person, person]")
 
-    assert pred.to_ax() == "pred parent/2 [person, person]"
+    assert pred.to_doxa() == "pred parent/2 [person, person]"
 
 
-def test_predicate_type_list_with_description_to_ax() -> None:
+def test_predicate_type_list_with_description_to_doxa() -> None:
     """Test serialization with both type list and description."""
-    pred = Predicate.from_ax('pred employee/2 [company, person] @{description:"test"}')
+    pred = Predicate.from_doxa(
+        'pred employee/2 [company, person] @{description:"test"}'
+    )
 
-    assert pred.to_ax() == 'pred employee/2 [company, person] @{description:"test"}'
+    assert pred.to_doxa() == 'pred employee/2 [company, person] @{description:"test"}'
 
 
 def test_predicate_type_list_round_trip() -> None:
     """Test round-trip parsing and serialization."""
-    original = Predicate.from_ax("pred triple/3 [entity, relation, entity]")
-    reparsed = Predicate.from_ax(original.to_ax())
+    original = Predicate.from_doxa("pred triple/3 [entity, relation, entity]")
+    reparsed = Predicate.from_doxa(original.to_doxa())
 
     assert reparsed.name == original.name
     assert reparsed.arity == original.arity
@@ -226,7 +230,7 @@ def test_predicate_type_list_arity_mismatch() -> None:
 
 def test_predicate_generate_type_constraints_basic() -> None:
     """Test constraint generation from type list."""
-    pred = Predicate.from_ax("pred parent/2 [person, person]")
+    pred = Predicate.from_doxa("pred parent/2 [person, person]")
     constraints = pred.generate_type_constraints()
 
     assert len(constraints) == 2
@@ -249,7 +253,7 @@ def test_predicate_generate_type_constraints_basic() -> None:
 
 def test_predicate_generate_type_constraints_three_args() -> None:
     """Test constraint generation with three arguments."""
-    pred = Predicate.from_ax("pred triple/3 [entity, relation, entity]")
+    pred = Predicate.from_doxa("pred triple/3 [entity, relation, entity]")
     constraints = pred.generate_type_constraints()
 
     assert len(constraints) == 3
@@ -260,7 +264,7 @@ def test_predicate_generate_type_constraints_three_args() -> None:
 
 def test_predicate_generate_type_constraints_none_when_no_type_list() -> None:
     """Test that no constraints are generated without type list."""
-    pred = Predicate.from_ax("pred parent/2")
+    pred = Predicate.from_doxa("pred parent/2")
     constraints = pred.generate_type_constraints()
 
     assert len(constraints) == 0
@@ -268,7 +272,7 @@ def test_predicate_generate_type_constraints_none_when_no_type_list() -> None:
 
 def test_branch_auto_generates_constraints_from_pred_type_list() -> None:
     """Test that Branch automatically generates constraints from predicate type lists."""
-    branch = Branch.from_ax(
+    branch = Branch.from_doxa(
         """
         pred person/1.
         pred parent/2 [person, person].
@@ -294,7 +298,7 @@ def test_branch_auto_generates_constraints_from_pred_type_list() -> None:
 
 def test_branch_type_list_with_multiple_predicates() -> None:
     """Test multiple predicates with type lists."""
-    branch = Branch.from_ax(
+    branch = Branch.from_doxa(
         """
         pred entity/1.
         pred relation/1.
@@ -309,7 +313,7 @@ def test_branch_type_list_with_multiple_predicates() -> None:
 
 def test_branch_mixed_predicates_with_and_without_types() -> None:
     """Test that predicates without type lists don't generate constraints."""
-    branch = Branch.from_ax(
+    branch = Branch.from_doxa(
         """
         pred person/1.
         pred parent/2 [person, person].
@@ -324,7 +328,7 @@ def test_branch_mixed_predicates_with_and_without_types() -> None:
 
 def test_branch_type_constraints_round_trip() -> None:
     """Test that auto-generated constraints survive round-trip."""
-    original = Branch.from_ax(
+    original = Branch.from_doxa(
         """
         pred person/1.
         pred parent/2 [person, person].
@@ -332,7 +336,7 @@ def test_branch_type_constraints_round_trip() -> None:
     )
 
     # Serialize to AX - this will include both predicates and constraints
-    ax_output = original.to_ax()
+    ax_output = original.to_doxa()
 
     # The serialized output should contain the predicate with type list
     assert "pred parent/2 [person, person]" in ax_output
@@ -342,7 +346,7 @@ def test_branch_type_constraints_round_trip() -> None:
     assert "!:- parent(X0, X1), not person(X1)" in ax_output
 
     # Reparse - this will generate constraints again from the predicate
-    reparsed = Branch.from_ax(ax_output)
+    reparsed = Branch.from_doxa(ax_output)
 
     # The predicates should be preserved
     assert len(reparsed.predicates) == 2
@@ -357,11 +361,10 @@ def test_branch_type_constraints_round_trip() -> None:
 
 def test_predicate_type_list_single_arg() -> None:
     """Test type list with single argument."""
-    pred = Predicate.from_ax("pred person/1 [entity]")
+    pred = Predicate.from_doxa("pred person/1 [entity]")
     constraints = pred.generate_type_constraints()
 
     assert len(constraints) == 1
     assert constraints[0].goals[0].pred_name == "person"
     assert constraints[0].goals[0].pred_arity == 1
     assert constraints[0].goals[1].pred_name == "entity"
-

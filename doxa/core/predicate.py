@@ -83,7 +83,7 @@ class Predicate(Base):
                 )
         return self
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         head = f"pred {self.name}/{self.arity}"
 
         if self.type_list is not None:
@@ -97,7 +97,7 @@ class Predicate(Base):
         return f'{head} @{{description:"{escaped}"}}'
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Predicate":
+    def from_doxa(cls, inp: str) -> "Predicate":
         if not isinstance(inp, str):
             raise TypeError("Predicate input must be a string.")
 

@@ -13,7 +13,7 @@ def test_var_name_valid(name: str):
     v = Var(kind=BaseKind.var, name=name)
     assert v.name == name
     assert v.kind == BaseKind.var
-    assert v.to_ax() == name
+    assert v.to_doxa() == name
 
 
 @pytest.mark.parametrize(
@@ -46,13 +46,13 @@ def test_var_name_rejects_non_string():
         Var(kind=BaseKind.var, name=123)  # type: ignore[arg-type]
 
 
-def test_var_to_ax_returns_name():
+def test_var_to_doxa_returns_name():
     v = Var(kind=BaseKind.var, name="X")
-    assert v.to_ax() == "X"
+    assert v.to_doxa() == "X"
 
 
-def test_var_from_ax_sets_kind_and_name():
-    v = Var.from_ax("X")
+def test_var_from_doxa_sets_kind_and_name():
+    v = Var.from_doxa("X")
     assert v.kind == BaseKind.var
     assert v.name == "X"
 

@@ -16,7 +16,7 @@ from doxa.core.literal_type import LiteralType
             '"a\\\\b"',
             LiteralType.str,
             r"a\\b",
-        ),  # NOTE: your from_ax does NOT unescape; it keeps backslashes
+        ),  # NOTE: your from_doxa does NOT unescape; it keeps backslashes
         ('"a\\"b"', LiteralType.str, r"a\"b"),  # NOTE: keeps backslash+quote sequence
         ("0", LiteralType.int, 0),
         ("-12", LiteralType.int, -12),
@@ -29,8 +29,8 @@ from doxa.core.literal_type import LiteralType
         ("2.", LiteralType.float, 2.0),
     ],
 )
-def test_literal_from_ax_valid(inp, datatype, value):
-    lit = Literal.from_ax(inp)
+def test_literal_from_doxa_valid(inp, datatype, value):
+    lit = Literal.from_doxa(inp)
     assert lit.kind == BaseKind.literal
     assert lit.datatype == datatype
     assert lit.value == value
@@ -40,7 +40,7 @@ def test_literal_from_ax_valid(inp, datatype, value):
     "inp",
     [
         "",  # empty
-        " ",  # whitespace-only (your from_ax doesn't strip)
+        " ",  # whitespace-only (your from_doxa doesn't strip)
         "True",  # case-sensitive bools
         "FALSE",
         '"unterminated',  # missing closing quote
@@ -55,14 +55,14 @@ def test_literal_from_ax_valid(inp, datatype, value):
         "inf",  # todo: should we allow? -> then also -inf
     ],
 )
-def test_literal_from_ax_invalid(inp):
+def test_literal_from_doxa_invalid(inp):
     with pytest.raises(ValueError):
-        Literal.from_ax(inp)
+        Literal.from_doxa(inp)
 
 
-def test_literal_to_ax_string_wraps_double_quotes():
+def test_literal_to_doxa_string_wraps_double_quotes():
     lit = Literal(kind=BaseKind.literal, datatype=LiteralType.str, value="hello")
-    assert lit.to_ax() == '"hello"'
+    assert lit.to_doxa() == '"hello"'
 
 
 @pytest.mark.parametrize(
@@ -74,7 +74,7 @@ def test_literal_to_ax_string_wraps_double_quotes():
         (2.0, "2.0"),
     ],
 )
-def test_literal_to_ax_numeric(value, expected):
+def test_literal_to_doxa_numeric(value, expected):
     datatype = (
         LiteralType.int
         if isinstance(value, int) and not isinstance(value, bool)
@@ -83,7 +83,7 @@ def test_literal_to_ax_numeric(value, expected):
     if isinstance(value, float):
         datatype = LiteralType.float
     lit = Literal(kind=BaseKind.literal, datatype=datatype, value=value)
-    assert lit.to_ax() == expected
+    assert lit.to_doxa() == expected
 
 
 @pytest.mark.parametrize(
@@ -99,9 +99,9 @@ def test_literal_to_ax_numeric(value, expected):
     ],
 )
 def test_literal_roundtrip_from_to_from(inp):
-    lit1 = Literal.from_ax(inp)
-    out = lit1.to_ax()
-    lit2 = Literal.from_ax(out)
+    lit1 = Literal.from_doxa(inp)
+    out = lit1.to_doxa()
+    lit2 = Literal.from_doxa(out)
 
     assert lit2.datatype == lit1.datatype
     assert lit2.value == lit1.value
@@ -126,9 +126,9 @@ def test_literal_extra_fields_forbidden():
 
 def test_literal_string_does_escape_quotes_current_impl():
     lit = Literal(kind=BaseKind.literal, datatype=LiteralType.str, value='a"b')
-    assert lit.to_ax() == '"a\\"b"'
+    assert lit.to_doxa() == '"a\\"b"'
 
 
 def test_literal_string_does_escape_backslash_current_impl():
     lit = Literal(kind=BaseKind.literal, datatype=LiteralType.str, value=r"a\b")
-    assert lit.to_ax() == '"a\\\\b"'
+    assert lit.to_doxa() == '"a\\\\b"'

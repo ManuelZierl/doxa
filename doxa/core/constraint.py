@@ -18,8 +18,8 @@ from doxa.core.goal import (
     GoalBase,
     LiteralArg,
     VarArg,
-    goal_arg_from_ax,
-    goal_from_ax,
+    goal_arg_from_doxa,
+    goal_from_doxa,
 )
 from doxa.core.goal_kinds import GoalKind
 from doxa.core.var import Var
@@ -41,8 +41,8 @@ ConstraintVarArg = VarArg
 ConstraintEntityArg = EntityArg
 ConstraintLiteralArg = LiteralArg
 ConstraintGoalArg = GoalArg
-constraint_goal_from_ax = goal_from_ax
-constraint_goal_arg_from_ax = goal_arg_from_ax
+constraint_goal_from_doxa = goal_from_doxa
+constraint_goal_arg_from_doxa = goal_arg_from_doxa
 
 
 class Constraint(Base, AuditMixin, AnnotateMixin):
@@ -61,8 +61,8 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
             )
         return self
 
-    def to_ax(self) -> str:
-        body = ", ".join(goal.to_ax() for goal in self.goals)
+    def to_doxa(self) -> str:
+        body = ", ".join(goal.to_doxa() for goal in self.goals)
 
         parts: List[str] = []
 
@@ -107,7 +107,7 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
         return f"!:- {body} @{{{', '.join(parts)}}}"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Constraint":
+    def from_doxa(cls, inp: str) -> "Constraint":
         """Parse a single constraint from AX syntax."""
         if not isinstance(inp, str):
             raise TypeError("Constraint input must be a string.")
@@ -130,7 +130,7 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
 
         goals: List[ConstraintGoal] = []
         for i, part in enumerate(goal_parts):
-            goal = constraint_goal_from_ax(part)
+            goal = constraint_goal_from_doxa(part)
             goals.append(goal.model_copy(update={"idx": i}))
 
         kwargs: Dict[str, object] = {

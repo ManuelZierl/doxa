@@ -51,31 +51,31 @@ def _builtin_names() -> set[str]:
     return {b.value for b in Builtin}
 
 
-def rule_head_arg_from_ax(inp: str) -> RuleHeadArg:
+def rule_head_arg_from_doxa(inp: str) -> RuleHeadArg:
     last_error: ValueError | None = None
 
     for cls in (RuleHeadLiteralArg, RuleHeadVarArg, RuleHeadEntityArg):
         try:
-            return cls.from_ax(inp)
+            return cls.from_doxa(inp)
         except ValueError as exc:
             last_error = exc
 
     raise ValueError(f"Invalid rule head argument: {inp!r}") from last_error
 
 
-def rule_goal_arg_from_ax(inp: str) -> RuleGoalArg:
+def rule_goal_arg_from_doxa(inp: str) -> RuleGoalArg:
     last_error: ValueError | None = None
 
     for cls in (RuleGoalLiteralArg, RuleGoalVarArg, RuleGoalEntityArg):
         try:
-            return cls.from_ax(inp)
+            return cls.from_doxa(inp)
         except ValueError as exc:
             last_error = exc
 
     raise ValueError(f"Invalid rule goal argument: {inp!r}") from last_error
 
 
-def rule_goal_from_ax(inp: str) -> RuleGoal:
+def rule_goal_from_doxa(inp: str) -> RuleGoal:
     s = inp.strip()
     if not s:
         raise ValueError("Rule goal input must not be empty.")
@@ -98,9 +98,9 @@ def rule_goal_from_ax(inp: str) -> RuleGoal:
     if name in _builtin_names():
         if negated:
             raise ValueError("Builtin goals cannot be negated.")
-        return RuleBuiltinGoal.from_ax(core)
+        return RuleBuiltinGoal.from_doxa(core)
 
-    return RuleAtomGoal.from_ax(s)
+    return RuleAtomGoal.from_doxa(s)
 
 
 class Rule(Base, AuditMixin, AnnotateMixin):
@@ -139,10 +139,10 @@ class Rule(Base, AuditMixin, AnnotateMixin):
 
         return self
 
-    def to_ax(self) -> str:
-        head_args_str = ", ".join(arg.to_ax() for arg in self.head_args)
+    def to_doxa(self) -> str:
+        head_args_str = ", ".join(arg.to_doxa() for arg in self.head_args)
         head = f"{self.head_pred_name}({head_args_str})"
-        body = ", ".join(goal.to_ax() for goal in self.goals)
+        body = ", ".join(goal.to_doxa() for goal in self.goals)
 
         ann = AnnotateMixin(
             b=self.b,
@@ -158,10 +158,10 @@ class Rule(Base, AuditMixin, AnnotateMixin):
         if is_default_annotation(ann):
             return f"{head} :- {body}"
 
-        return f"{head} :- {body} {ann.to_ax_annotation()}"
+        return f"{head} :- {body} {ann.to_doxa_annotation()}"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Rule":
+    def from_doxa(cls, inp: str) -> "Rule":
         if not isinstance(inp, str):
             raise TypeError("Rule input must be a string.")
 
@@ -190,7 +190,7 @@ class Rule(Base, AuditMixin, AnnotateMixin):
 
         head_args: List[RuleHeadArg] = []
         for i, part in enumerate(head_arg_parts):
-            arg = rule_head_arg_from_ax(part)
+            arg = rule_head_arg_from_doxa(part)
             head_args.append(arg.model_copy(update={"pos": i}))
 
         goal_parts = split_top_level(body_str)
@@ -199,7 +199,7 @@ class Rule(Base, AuditMixin, AnnotateMixin):
 
         goals: List[RuleGoal] = []
         for i, part in enumerate(goal_parts):
-            goal = rule_goal_from_ax(part)
+            goal = rule_goal_from_doxa(part)
             goals.append(goal.model_copy(update={"idx": i}))
 
         kwargs: Dict[str, object] = {
@@ -223,16 +223,16 @@ class RuleHeadVarArg(Base):
     term_kind: Literal[TermKind.var] = Field(...)
     var: Var = Field(..., description="Variable value.")
 
-    def to_ax(self) -> str:
-        return self.var.to_ax()
+    def to_doxa(self) -> str:
+        return self.var.to_doxa()
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleHeadVarArg":
+    def from_doxa(cls, inp: str) -> "RuleHeadVarArg":
         return cls(
             kind=BaseKind.rule_head_arg,
             pos=0,
             term_kind=TermKind.var,
-            var=Var.from_ax(inp),
+            var=Var.from_doxa(inp),
         )
 
 
@@ -242,12 +242,12 @@ class RuleHeadEntityArg(Base):
     term_kind: Literal[TermKind.ent] = Field(...)
     ent_name: str = Field(..., description="Entity name reference.")
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.ent_name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleHeadEntityArg":
-        ent = Entity.from_ax(inp)
+    def from_doxa(cls, inp: str) -> "RuleHeadEntityArg":
+        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.rule_head_arg,
             pos=0,
@@ -279,7 +279,7 @@ class RuleHeadLiteralArg(Base):
             )
         return self
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         if self.lit_type == LiteralType.str:
             return render_string_literal(self.value)
         if self.lit_type == LiteralType.int:
@@ -289,7 +289,7 @@ class RuleHeadLiteralArg(Base):
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleHeadLiteralArg":
+    def from_doxa(cls, inp: str) -> "RuleHeadLiteralArg":
         s = inp.strip()
 
         if s.startswith('"') and s.endswith('"'):
@@ -350,13 +350,13 @@ class RuleAtomGoal(RuleGoalBase):
             )
         return self
 
-    def to_ax(self) -> str:
-        args = ", ".join(arg.to_ax() for arg in self.goal_args)
+    def to_doxa(self) -> str:
+        args = ", ".join(arg.to_doxa() for arg in self.goal_args)
         atom = f"{self.pred_name}({args})"
         return f"not {atom}" if self.negated else atom
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleAtomGoal":
+    def from_doxa(cls, inp: str) -> "RuleAtomGoal":
         if not isinstance(inp, str):
             raise TypeError("Rule atom goal input must be a string.")
 
@@ -387,7 +387,7 @@ class RuleAtomGoal(RuleGoalBase):
 
         args: List[RuleGoalArg] = []
         for i, part in enumerate(arg_parts):
-            arg = rule_goal_arg_from_ax(part)
+            arg = rule_goal_arg_from_doxa(part)
             args.append(arg.model_copy(update={"pos": i}))
 
         return cls(
@@ -415,12 +415,12 @@ class RuleBuiltinGoal(RuleGoalBase):
             )
         return self
 
-    def to_ax(self) -> str:
-        args = ", ".join(arg.to_ax() for arg in self.goal_args)
+    def to_doxa(self) -> str:
+        args = ", ".join(arg.to_doxa() for arg in self.goal_args)
         return f"{self.builtin_name.value}({args})"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleBuiltinGoal":
+    def from_doxa(cls, inp: str) -> "RuleBuiltinGoal":
         if not isinstance(inp, str):
             raise TypeError("Rule builtin goal input must be a string.")
 
@@ -444,7 +444,7 @@ class RuleBuiltinGoal(RuleGoalBase):
 
         args: List[RuleGoalArg] = []
         for i, part in enumerate(arg_parts):
-            arg = rule_goal_arg_from_ax(part)
+            arg = rule_goal_arg_from_doxa(part)
             args.append(arg.model_copy(update={"pos": i}))
 
         return cls(
@@ -468,16 +468,16 @@ class RuleGoalVarArg(Base):
     term_kind: Literal[TermKind.var] = Field(...)
     var: Var = Field(..., description="Variable value.")
 
-    def to_ax(self) -> str:
-        return self.var.to_ax()
+    def to_doxa(self) -> str:
+        return self.var.to_doxa()
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleGoalVarArg":
+    def from_doxa(cls, inp: str) -> "RuleGoalVarArg":
         return cls(
             kind=BaseKind.rule_goal_arg,
             pos=0,
             term_kind=TermKind.var,
-            var=Var.from_ax(inp),
+            var=Var.from_doxa(inp),
         )
 
 
@@ -487,12 +487,12 @@ class RuleGoalEntityArg(Base):
     term_kind: Literal[TermKind.ent] = Field(...)
     ent_name: str = Field(..., description="Entity name reference.")
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.ent_name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleGoalEntityArg":
-        ent = Entity.from_ax(inp)
+    def from_doxa(cls, inp: str) -> "RuleGoalEntityArg":
+        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.rule_goal_arg,
             pos=0,
@@ -524,7 +524,7 @@ class RuleGoalLiteralArg(Base):
             )
         return self
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         if self.lit_type == LiteralType.str:
             return render_string_literal(self.value)
         if self.lit_type == LiteralType.int:
@@ -534,7 +534,7 @@ class RuleGoalLiteralArg(Base):
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
-    def from_ax(cls, inp: str) -> "RuleGoalLiteralArg":
+    def from_doxa(cls, inp: str) -> "RuleGoalLiteralArg":
         s = inp.strip()
 
         if s.startswith('"') and s.endswith('"'):

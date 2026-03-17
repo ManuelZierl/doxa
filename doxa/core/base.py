@@ -7,9 +7,9 @@ class Base(BaseModel):
     kind: BaseKind = Field(..., description="the kind of this Ax Element")
     # _DB_SCHEMA = ...
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         raise NotImplementedError()
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Base":
+    def from_doxa(cls, inp: str) -> "Base":
         raise NotImplementedError()

@@ -30,12 +30,12 @@ _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()
 
 
-def belief_arg_from_ax(inp: str) -> BeliefArg:
+def belief_arg_from_doxa(inp: str) -> BeliefArg:
     last_error: ValueError | None = None
 
     for cls in (BeliefLiteralArg, BeliefEntityArg):
         try:
-            return cls.from_ax(inp)
+            return cls.from_doxa(inp)
         except ValueError as exc:
             last_error = exc
 
@@ -50,12 +50,12 @@ class BeliefEntityArg(Base):
         description="Entity name reference.",
     )
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.ent_name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "BeliefEntityArg":
-        ent = Entity.from_ax(inp)
+    def from_doxa(cls, inp: str) -> "BeliefEntityArg":
+        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.belief_arg,
             term_kind=TermKind.ent,
@@ -75,7 +75,7 @@ class BeliefLiteralArg(Base):
         description="Literal value.",
     )
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         if self.lit_type == LiteralType.str:
             return f'"{self.value}"'
         if self.lit_type == LiteralType.int:
@@ -85,7 +85,7 @@ class BeliefLiteralArg(Base):
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
-    def from_ax(cls, inp: str) -> "BeliefLiteralArg":
+    def from_doxa(cls, inp: str) -> "BeliefLiteralArg":
         s = inp.strip()
 
         if s.startswith('"') and s.endswith('"'):
@@ -153,8 +153,8 @@ class BeliefRecord(Base, AuditMixin, AnnotateMixin):
         description="Ground arguments of the asserted atom, ordered by predicate position.",
     )
 
-    def to_ax(self) -> str:
-        args_str = ", ".join(arg.to_ax() for arg in self.args)
+    def to_doxa(self) -> str:
+        args_str = ", ".join(arg.to_doxa() for arg in self.args)
         atom = f"{self.pred_name}({args_str})"
 
         ann = AnnotateMixin(
@@ -171,10 +171,10 @@ class BeliefRecord(Base, AuditMixin, AnnotateMixin):
         if is_default_annotation(ann):
             return atom
 
-        return f"{atom} {ann.to_ax_annotation()}"
+        return f"{atom} {ann.to_doxa_annotation()}"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "BeliefRecord":
+    def from_doxa(cls, inp: str) -> "BeliefRecord":
         if not isinstance(inp, str):
             raise TypeError("BeliefRecord input must be a string.")
 
@@ -206,7 +206,7 @@ class BeliefRecord(Base, AuditMixin, AnnotateMixin):
         arg_str = m.group("args").strip()
         arg_parts = [] if not arg_str else split_top_level(arg_str)
 
-        args = [belief_arg_from_ax(part) for part in arg_parts]
+        args = [belief_arg_from_doxa(part) for part in arg_parts]
 
         kwargs: Dict[str, object] = {
             "kind": BaseKind.belief_record,

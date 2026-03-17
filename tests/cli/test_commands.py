@@ -17,7 +17,7 @@ from doxa.cli.commands import (
     dispatch,
     _load_file,
     _auto_fix_kinds,
-    _branch_to_ax,
+    _branch_to_doxa,
     _branch_to_dict,
     _parse_dump_args,
     HELP_TEXT,
@@ -29,7 +29,7 @@ from doxa.core.base_kinds import BaseKind
 
 @pytest.fixture
 def mock_state() -> TerminalState:
-    branch = Branch.from_ax("""
+    branch = Branch.from_doxa("""
         pred person/1.
         pred parent/2.
         
@@ -85,8 +85,8 @@ def test_parse_dump_args_multiple_flags() -> None:
     assert flags["constraints"] is True
 
 
-def test_branch_to_ax(mock_state: TerminalState) -> None:
-    result = _branch_to_ax(mock_state)
+def test_branch_to_doxa(mock_state: TerminalState) -> None:
+    result = _branch_to_doxa(mock_state)
 
     assert "person(alice)." in result
     assert "person(bob)." in result
@@ -95,15 +95,15 @@ def test_branch_to_ax(mock_state: TerminalState) -> None:
     assert "!:- ancestor(X, X)." in result
 
 
-def test_branch_to_ax_no_predicates(mock_state: TerminalState) -> None:
-    result = _branch_to_ax(mock_state, predicates=False)
+def test_branch_to_doxa_no_predicates(mock_state: TerminalState) -> None:
+    result = _branch_to_doxa(mock_state, predicates=False)
 
     assert "pred person/1" not in result
     assert "person(alice)." in result
 
 
-def test_branch_to_ax_no_belief_records(mock_state: TerminalState) -> None:
-    result = _branch_to_ax(mock_state, belief_records=False)
+def test_branch_to_doxa_no_belief_records(mock_state: TerminalState) -> None:
+    result = _branch_to_doxa(mock_state, belief_records=False)
 
     assert "person(alice)." not in result
     assert "ancestor(X, Y) :- parent(X, Y)." in result
@@ -222,7 +222,7 @@ def test_load_file_ax_format(tmp_path: Path) -> None:
 
 def test_load_file_json_format(tmp_path: Path) -> None:
     json_file = tmp_path / "test.json"
-    branch_data = Branch.from_ax("person(alice).")
+    branch_data = Branch.from_doxa("person(alice).")
     json_file.write_text(branch_data.model_dump_json())
 
     branch = _load_file(json_file)

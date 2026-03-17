@@ -21,7 +21,7 @@ class Literal(Base):
     )
     datatype: LiteralType = Field(..., description="Literal type tag used by AX.")
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         if self.datatype == LiteralType.str:
             if "\n" in self.value or "\r" in self.value:
                 raise ValueError("Multiline string literals are not allowed")
@@ -30,9 +30,9 @@ class Literal(Base):
         return str(self.value)
 
     @classmethod
-    def from_ax(cls, inp: str) -> "Literal":
+    def from_doxa(cls, inp: str) -> "Literal":
         if not inp:
-            raise ValueError("Literal.from_ax: empty input")
+            raise ValueError("Literal.from_doxa: empty input")
 
         # string literal
         if _DQ_STR_RE.fullmatch(inp):
@@ -49,6 +49,6 @@ class Literal(Base):
             )
 
         raise ValueError(
-            "Literal.from_ax: unsupported literal syntax. Expected a double-quoted string, "
+            "Literal.from_doxa: unsupported literal syntax. Expected a double-quoted string, "
             "true/false, int, or float."
         )

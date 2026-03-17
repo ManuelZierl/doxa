@@ -84,13 +84,13 @@ def merge_command(
         # Convert to .doxa format
         lines: list[str] = []
         for p in merged_branch.predicates:
-            lines.append(f"{p.to_ax()}.")
+            lines.append(f"{p.to_doxa()}.")
         for r in merged_branch.belief_records:
-            lines.append(f"{r.to_ax()}.")
+            lines.append(f"{r.to_doxa()}.")
         for r in merged_branch.rules:
-            lines.append(f"{r.to_ax()}.")
+            lines.append(f"{r.to_doxa()}.")
         for c in merged_branch.constraints:
-            lines.append(f"{c.to_ax()}.")
+            lines.append(f"{c.to_doxa()}.")
         content = "\n".join(lines)
 
     # Write output

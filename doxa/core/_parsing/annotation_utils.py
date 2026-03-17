@@ -41,7 +41,7 @@ def extract_annotation_kwargs(annotation_str: str | None) -> dict[str, object]:
 
     from doxa.core.annotate_mixin import AnnotateMixin
 
-    ann = AnnotateMixin.from_ax_annotation(annotation_str)
+    ann = AnnotateMixin.from_doxa_annotation(annotation_str)
     return {
         "b": ann.b,
         "d": ann.d,

@@ -29,7 +29,7 @@ def _builtin_names() -> set[str]:
     return {b.value for b in Builtin}
 
 
-def goal_from_ax(inp: str) -> "Goal":
+def goal_from_doxa(inp: str) -> "Goal":
     s = inp.strip()
     if not s:
         raise ValueError("Goal input must not be empty.")
@@ -52,17 +52,17 @@ def goal_from_ax(inp: str) -> "Goal":
     if name in _builtin_names():
         if negated:
             raise ValueError("Builtin goals cannot be negated.")
-        return BuiltinGoal.from_ax(core)
+        return BuiltinGoal.from_doxa(core)
 
-    return AtomGoal.from_ax(s)
+    return AtomGoal.from_doxa(s)
 
 
-def goal_arg_from_ax(inp: str) -> "GoalArg":
+def goal_arg_from_doxa(inp: str) -> "GoalArg":
     last_error: ValueError | None = None
 
     for cls in (LiteralArg, VarArg, EntityArg):
         try:
-            return cls.from_ax(inp)
+            return cls.from_doxa(inp)
         except ValueError as exc:
             last_error = exc
 
@@ -91,13 +91,13 @@ class AtomGoal(GoalBase):
             )
         return self
 
-    def to_ax(self) -> str:
-        args = ", ".join(arg.to_ax() for arg in self.goal_args)
+    def to_doxa(self) -> str:
+        args = ", ".join(arg.to_doxa() for arg in self.goal_args)
         atom = f"{self.pred_name}({args})"
         return f"not {atom}" if self.negated else atom
 
     @classmethod
-    def from_ax(cls, inp: str) -> "AtomGoal":
+    def from_doxa(cls, inp: str) -> "AtomGoal":
         if not isinstance(inp, str):
             raise TypeError("Atom goal input must be a string.")
 
@@ -128,7 +128,7 @@ class AtomGoal(GoalBase):
 
         args: List[GoalArg] = []
         for i, part in enumerate(arg_parts):
-            arg = goal_arg_from_ax(part)
+            arg = goal_arg_from_doxa(part)
             args.append(arg.model_copy(update={"pos": i}))
 
         return cls(
@@ -156,12 +156,12 @@ class BuiltinGoal(GoalBase):
             )
         return self
 
-    def to_ax(self) -> str:
-        args = ", ".join(arg.to_ax() for arg in self.goal_args)
+    def to_doxa(self) -> str:
+        args = ", ".join(arg.to_doxa() for arg in self.goal_args)
         return f"{self.builtin_name.value}({args})"
 
     @classmethod
-    def from_ax(cls, inp: str) -> "BuiltinGoal":
+    def from_doxa(cls, inp: str) -> "BuiltinGoal":
         if not isinstance(inp, str):
             raise TypeError("Builtin goal input must be a string.")
 
@@ -185,7 +185,7 @@ class BuiltinGoal(GoalBase):
 
         args: List[GoalArg] = []
         for i, part in enumerate(arg_parts):
-            arg = goal_arg_from_ax(part)
+            arg = goal_arg_from_doxa(part)
             args.append(arg.model_copy(update={"pos": i}))
 
         return cls(
@@ -209,16 +209,16 @@ class VarArg(Base):
     term_kind: Literal["var"] = Field(...)
     var: Var = Field(..., description="Variable name.")
 
-    def to_ax(self) -> str:
-        return self.var.to_ax()
+    def to_doxa(self) -> str:
+        return self.var.to_doxa()
 
     @classmethod
-    def from_ax(cls, inp: str) -> "VarArg":
+    def from_doxa(cls, inp: str) -> "VarArg":
         return cls(
             kind=BaseKind.goal_arg,
             pos=0,
             term_kind="var",
-            var=Var.from_ax(inp),
+            var=Var.from_doxa(inp),
         )
 
 
@@ -228,12 +228,12 @@ class EntityArg(Base):
     term_kind: Literal["ent"] = Field(...)
     ent_name: str = Field(..., description="Entity name reference.")
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         return self.ent_name
 
     @classmethod
-    def from_ax(cls, inp: str) -> "EntityArg":
-        ent = Entity.from_ax(inp)
+    def from_doxa(cls, inp: str) -> "EntityArg":
+        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.goal_arg,
             pos=0,
@@ -259,7 +259,7 @@ class LiteralArg(Base):
             raise ValueError("Literal with lit_type='float' must use a float value.")
         return self
 
-    def to_ax(self) -> str:
+    def to_doxa(self) -> str:
         if self.lit_type == LiteralType.str:
             return f'"{self.value}"'
         if self.lit_type == LiteralType.int:
@@ -269,7 +269,7 @@ class LiteralArg(Base):
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
-    def from_ax(cls, inp: str) -> "LiteralArg":
+    def from_doxa(cls, inp: str) -> "LiteralArg":
         s = inp.strip()
 
         if s.startswith('"') and s.endswith('"'):

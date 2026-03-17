@@ -130,7 +130,7 @@ def test_add_to_branch_multiple_statements(capsys) -> None:
 
 
 def test_run_query(capsys) -> None:
-    branch = Branch.from_ax("person(alice). person(bob).")
+    branch = Branch.from_doxa("person(alice). person(bob).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
     mock_result.success = True
@@ -151,7 +151,7 @@ def test_run_query(capsys) -> None:
 
 
 def test_run_query_with_results(capsys) -> None:
-    branch = Branch.from_ax("person(alice). person(bob).")
+    branch = Branch.from_doxa("person(alice). person(bob).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
     mock_result.success = True
@@ -175,7 +175,7 @@ def test_run_query_with_results(capsys) -> None:
 
 
 def test_run_query_no_results(capsys) -> None:
-    branch = Branch.from_ax("person(alice).")
+    branch = Branch.from_doxa("person(alice).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
     mock_result.success = False
@@ -212,7 +212,7 @@ def test_run_query_parse_error(capsys) -> None:
 
 
 def test_run_query_engine_error(capsys) -> None:
-    branch = Branch.from_ax("person(alice).")
+    branch = Branch.from_doxa("person(alice).")
     mock_engine = MagicMock()
     mock_engine.evaluate.side_effect = Exception("Engine error")
 
@@ -231,7 +231,7 @@ def test_run_query_engine_error(capsys) -> None:
 
 
 def test_run_query_not_implemented(capsys) -> None:
-    branch = Branch.from_ax("person(alice).")
+    branch = Branch.from_doxa("person(alice).")
     mock_engine = MagicMock()
     mock_engine.evaluate.side_effect = NotImplementedError()
 
@@ -250,7 +250,7 @@ def test_run_query_not_implemented(capsys) -> None:
 
 
 def test_handle_statement_query() -> None:
-    branch = Branch.from_ax("person(alice).")
+    branch = Branch.from_doxa("person(alice).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
     mock_result.success = False
