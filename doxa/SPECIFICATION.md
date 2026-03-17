@@ -264,6 +264,7 @@ Interactive-mode only. Prefix is `/-`:
 - Every predicate must be declared before its first use.
 - `pred` annotations accept `description` only — any other key is a parse error.
 - `pred` type lists are optional; when provided, they must match the declared arity.
+- **Predicate names cannot be reserved keywords** (`not`, `pred`) or builtin names (`eq`, `ne`, `lt`, `leq`, `gt`, `geq`, `add`, `sub`, `mul`, `div`, `between`).
 - Identifiers (predicate names, entity ids) must be ASCII only.
 - `between` does not enumerate — all three arguments must already be bound.
 - Builtin goals cannot be negated with `not`.

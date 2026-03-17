@@ -169,6 +169,26 @@ def test_predicate_direct_model_rejects_negative_arity() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "reserved_name",
+    ["not", "pred"],
+)
+def test_predicate_rejects_reserved_keywords(reserved_name: str) -> None:
+    """Test that reserved keywords cannot be used as predicate names."""
+    with pytest.raises(ValueError, match="reserved keyword"):
+        Predicate.from_doxa(f"pred {reserved_name}/2")
+
+
+@pytest.mark.parametrize(
+    "builtin_name",
+    ["eq", "ne", "lt", "leq", "gt", "geq", "add", "sub", "mul", "div", "between"],
+)
+def test_predicate_rejects_builtin_names(builtin_name: str) -> None:
+    """Test that builtin predicate names cannot be redeclared."""
+    with pytest.raises(ValueError, match="builtin predicate"):
+        Predicate.from_doxa(f"pred {builtin_name}/2")
+
+
 def test_predicate_with_type_list_parsing() -> None:
     """Test parsing predicate with type list."""
     pred = Predicate.from_doxa("pred parent/2 [person, person]")

@@ -25,6 +25,15 @@ _PRED_RE = re.compile(
 
 _PRED_NAME_RE = re.compile(r"^[a-z][A-Za-z0-9_]*$")
 
+# Reserved keywords that cannot be used as predicate names
+_RESERVED_KEYWORDS = {"not", "pred"}
+
+# Builtin predicate names that cannot be redeclared
+_BUILTIN_NAMES = {
+    "eq", "ne", "lt", "leq", "gt", "geq",
+    "add", "sub", "mul", "div", "between"
+}
+
 
 class Predicate(Base):
     kind: Literal[BaseKind.predicate] = Field(...)
@@ -53,14 +62,26 @@ class Predicate(Base):
         if not isinstance(v, str) or not v:
             raise ValueError("Predicate.name must be a non-empty string")
 
-        if _PRED_NAME_RE.fullmatch(v):
-            return v
+        if not _PRED_NAME_RE.fullmatch(v):
+            raise ValueError(
+                "Invalid Predicate.name: expected an unquoted identifier starting "
+                "with a lowercase letter and then using only letters, digits, or '_'. "
+                "Examples: parent, source_document, riskScore2."
+            )
 
-        raise ValueError(
-            "Invalid Predicate.name: expected an unquoted identifier starting "
-            "with a lowercase letter and then using only letters, digits, or '_'. "
-            "Examples: parent, source_document, riskScore2."
-        )
+        if v in _RESERVED_KEYWORDS:
+            raise ValueError(
+                f"Predicate name '{v}' is a reserved keyword and cannot be used. "
+                f"Reserved keywords: {sorted(_RESERVED_KEYWORDS)}"
+            )
+
+        if v in _BUILTIN_NAMES:
+            raise ValueError(
+                f"Predicate name '{v}' is a builtin predicate and cannot be redeclared. "
+                f"Builtin predicates: {sorted(_BUILTIN_NAMES)}"
+            )
+
+        return v
 
     @field_validator("arity")
     @classmethod
