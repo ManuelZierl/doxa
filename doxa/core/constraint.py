@@ -44,18 +44,6 @@ ConstraintGoalArg = GoalArg
 constraint_goal_from_ax = goal_from_ax
 constraint_goal_arg_from_ax = goal_arg_from_ax
 
-_SIG_RE = re.compile(
-    r"""^
-    \s*sig\s*\(
-    \s*(?P<pred_name>[a-z][A-Za-z0-9_]*)
-    \s*,\s*
-    \[(?P<types>[^\]]+)\]
-    (?P<rest>.*)
-    \)\s*$
-    """,
-    re.VERBOSE | re.DOTALL,
-)
-
 
 class Constraint(Base, AuditMixin, AnnotateMixin):
     kind: Literal[BaseKind.constraint] = Field(...)
@@ -120,24 +108,13 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
 
     @classmethod
     def from_ax(cls, inp: str) -> "Constraint":
-        """Parse a single constraint from AX syntax.
-
-        Note: This does NOT handle sig() syntax, which expands to multiple constraints.
-        Use from_ax_multi() for that.
-        """
+        """Parse a single constraint from AX syntax."""
         if not isinstance(inp, str):
             raise TypeError("Constraint input must be a string.")
 
         s = inp.strip()
         if not s:
             raise ValueError("Constraint input must not be empty.")
-
-        # Check for sig syntactic sugar - this is an error in from_ax
-        if _SIG_RE.match(s):
-            raise ValueError(
-                "sig() syntax expands to multiple constraints. "
-                "Use Constraint.from_ax_multi() or parse at the Branch level."
-            )
 
         if not s.startswith("!:-"):
             raise ValueError("Constraint must start with '!:-'.")
@@ -166,119 +143,3 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
             kwargs.update(extract_annotation_kwargs(annotation_str))
 
         return cls(**kwargs)
-
-    @classmethod
-    def from_ax_multi(cls, inp: str) -> List["Constraint"]:
-        """Parse constraint(s) from AX syntax.
-
-        Handles both regular constraints and sig() syntax which expands to multiple constraints.
-        Returns a list of constraints (single item for regular constraints, multiple for sig).
-        """
-        if not isinstance(inp, str):
-            raise TypeError("Constraint input must be a string.")
-
-        s = inp.strip()
-        if not s:
-            raise ValueError("Constraint input must not be empty.")
-
-        # Check for sig syntactic sugar
-        sig_match = _SIG_RE.match(s)
-        if sig_match:
-            return cls._from_sig_syntax(sig_match)
-
-        # Regular constraint - return single-item list
-        return [cls.from_ax(s)]
-
-    @classmethod
-    def _from_sig_syntax(cls, match: re.Match) -> List["Constraint"]:
-        """Parse sig(pred_name, [type1, type2, ...], ...) syntax.
-
-        This is syntactic sugar that expands to multiple type-checking constraints.
-        For example: sig(parent, [person, person]) expands to:
-        !:- parent(X0, X1), not person(X0).
-        !:- parent(X0, X1), not person(X1).
-
-        Returns a list of constraints, one for each argument type.
-        """
-        pred_name = match.group("pred_name")
-        types_str = match.group("types").strip()
-        rest = match.group("rest").strip()
-
-        # Parse the type list
-        type_parts = split_top_level(types_str)
-        types = [t.strip() for t in type_parts]
-
-        if not types:
-            raise ValueError(
-                "sig() syntax requires at least one type in the type list."
-            )
-
-        # Parse optional annotation from rest
-        annotation_str = None
-        if rest:
-            # rest might contain additional parameters like view="..."
-            # For now, we'll check if there's an @{...} annotation
-            if "@{" in rest:
-                _, annotation_str = split_annotation_suffix(rest)
-
-        arity = len(types)
-        constraints: List[Constraint] = []
-
-        # Generate one constraint for each argument position
-        for arg_idx, type_name in enumerate(types):
-            # Create the main predicate goal: pred_name(X0, X1, ...)
-            pred_args: List[GoalArg] = []
-            for i in range(arity):
-                var = Var(kind=BaseKind.var, name=f"X{i}")
-                pred_args.append(
-                    VarArg(
-                        kind=BaseKind.goal_arg,
-                        pos=i,
-                        term_kind="var",
-                        var=var,
-                    )
-                )
-
-            pred_goal = AtomGoal(
-                kind=BaseKind.goal,
-                goal_kind=GoalKind.atom,
-                idx=0,
-                pred_name=pred_name,
-                pred_arity=arity,
-                negated=False,
-                goal_args=pred_args,
-            )
-
-            # Create the type-checking goal: not type_name(X{arg_idx})
-            type_var = Var(kind=BaseKind.var, name=f"X{arg_idx}")
-            type_arg = VarArg(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="var",
-                var=type_var,
-            )
-
-            type_goal = AtomGoal(
-                kind=BaseKind.goal,
-                goal_kind=GoalKind.atom,
-                idx=1,
-                pred_name=type_name,
-                pred_arity=1,
-                negated=True,
-                goal_args=[type_arg],
-            )
-
-            goals = [pred_goal, type_goal]
-
-            kwargs: Dict[str, object] = {
-                "kind": BaseKind.constraint,
-                "created_at": datetime.now(timezone.utc),
-                "goals": goals,
-            }
-
-            if annotation_str:
-                kwargs.update(extract_annotation_kwargs(annotation_str))
-
-            constraints.append(cls(**kwargs))
-
-        return constraints

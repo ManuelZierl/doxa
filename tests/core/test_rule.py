@@ -70,22 +70,6 @@ def test_rule_head_literal_arg_from_ax_float() -> None:
     assert arg.to_ax() == "3.14"
 
 
-def test_rule_head_literal_arg_from_ax_bool_true() -> None:
-    arg = RuleHeadLiteralArg.from_ax("true")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is True
-    assert arg.to_ax() == "true"
-
-
-def test_rule_head_literal_arg_from_ax_bool_false() -> None:
-    arg = RuleHeadLiteralArg.from_ax("false")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is False
-    assert arg.to_ax() == "false"
-
-
 def test_rule_head_literal_arg_rejects_invalid_literal() -> None:
     with pytest.raises(ValueError, match="Invalid rule head literal argument"):
         RuleHeadLiteralArg.from_ax("not_a_literal")
@@ -110,17 +94,6 @@ def test_rule_head_literal_arg_rejects_wrong_type_for_float() -> None:
             term_kind=TermKind.lit,
             lit_type=LiteralType.float,
             value=3,
-        )
-
-
-def test_rule_head_literal_arg_rejects_wrong_type_for_bool() -> None:
-    with pytest.raises(ValidationError):
-        RuleHeadLiteralArg(
-            kind=BaseKind.rule_head_arg,
-            pos=0,
-            term_kind=TermKind.lit,
-            lit_type=LiteralType.bool,
-            value=1,
         )
 
 
@@ -202,22 +175,6 @@ def test_rule_goal_literal_arg_from_ax_float() -> None:
     assert arg.to_ax() == "3.14"
 
 
-def test_rule_goal_literal_arg_from_ax_bool_true() -> None:
-    arg = RuleGoalLiteralArg.from_ax("true")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is True
-    assert arg.to_ax() == "true"
-
-
-def test_rule_goal_literal_arg_from_ax_bool_false() -> None:
-    arg = RuleGoalLiteralArg.from_ax("false")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is False
-    assert arg.to_ax() == "false"
-
-
 def test_rule_goal_literal_arg_rejects_invalid_literal() -> None:
     with pytest.raises(ValueError, match="Invalid rule goal literal argument"):
         RuleGoalLiteralArg.from_ax("not_a_literal")
@@ -242,17 +199,6 @@ def test_rule_goal_literal_arg_rejects_wrong_type_for_float() -> None:
             term_kind=TermKind.lit,
             lit_type=LiteralType.float,
             value=3,
-        )
-
-
-def test_rule_goal_literal_arg_rejects_wrong_type_for_bool() -> None:
-    with pytest.raises(ValidationError):
-        RuleGoalLiteralArg(
-            kind=BaseKind.rule_goal_arg,
-            pos=0,
-            term_kind=TermKind.lit,
-            lit_type=LiteralType.bool,
-            value=1,
         )
 
 

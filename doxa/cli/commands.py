@@ -508,7 +508,7 @@ def _fix_nested_kinds(obj, parent_context=None):
 # ── file loading helper (also used by load command) ──────────────────────────
 
 
-def _load_file(path: Path, fix_missing_kinds: bool = False) -> 'Branch':
+def _load_file(path: Path, fix_missing_kinds: bool = False) -> "Branch":
     from doxa.core.branch import Branch
     import json as json_module
     from pydantic import ValidationError

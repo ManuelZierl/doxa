@@ -247,7 +247,7 @@ class LiteralArg(Base):
     pos: int = Field(..., ge=0, description="Argument position in goal (0-based).")
     term_kind: Literal["lit"] = Field(...)
     lit_type: LiteralType = Field(..., description="Literal type tag.")
-    value: str | int | float | bool = Field(..., description="Literal value.")
+    value: str | int | float = Field(..., description="Literal value.")
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "LiteralArg":
@@ -257,19 +257,15 @@ class LiteralArg(Base):
             raise ValueError("Literal with lit_type='int' must use an int value.")
         if self.lit_type == LiteralType.float and type(self.value) is not float:
             raise ValueError("Literal with lit_type='float' must use a float value.")
-        if self.lit_type == LiteralType.bool and type(self.value) is not bool:
-            raise ValueError("Literal with lit_type='bool' must use a bool value.")
         return self
 
     def to_ax(self) -> str:
         if self.lit_type == LiteralType.str:
-            return render_string_literal(self.value)
+            return f'"{self.value}"'
         if self.lit_type == LiteralType.int:
             return str(self.value)
         if self.lit_type == LiteralType.float:
             return str(self.value)
-        if self.lit_type == LiteralType.bool:
-            return "true" if self.value else "false"
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
@@ -283,24 +279,6 @@ class LiteralArg(Base):
                 term_kind="lit",
                 lit_type=LiteralType.str,
                 value=parse_python_string_literal(s),
-            )
-
-        low = s.lower()
-        if low == "true":
-            return cls(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="lit",
-                lit_type=LiteralType.bool,
-                value=True,
-            )
-        if low == "false":
-            return cls(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="lit",
-                lit_type=LiteralType.bool,
-                value=False,
             )
 
         if _INT_RE.fullmatch(s):

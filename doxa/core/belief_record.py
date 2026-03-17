@@ -70,20 +70,18 @@ class BeliefLiteralArg(Base):
         ...,
         description="Literal type tag.",
     )
-    value: str | int | float | bool = Field(
+    value: str | int | float = Field(
         ...,
         description="Literal value.",
     )
 
     def to_ax(self) -> str:
         if self.lit_type == LiteralType.str:
-            return render_string_literal(self.value)
+            return f'"{self.value}"'
         if self.lit_type == LiteralType.int:
             return str(self.value)
         if self.lit_type == LiteralType.float:
             return str(self.value)
-        if self.lit_type == LiteralType.bool:
-            return "true" if self.value else "false"
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
@@ -96,22 +94,6 @@ class BeliefLiteralArg(Base):
                 term_kind=TermKind.lit,
                 lit_type=LiteralType.str,
                 value=parse_python_string_literal(s),
-            )
-
-        low = s.lower()
-        if low == "true":
-            return cls(
-                kind=BaseKind.belief_arg,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.bool,
-                value=True,
-            )
-        if low == "false":
-            return cls(
-                kind=BaseKind.belief_arg,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.bool,
-                value=False,
             )
 
         if _INT_RE.fullmatch(s):
@@ -145,10 +127,6 @@ class BeliefLiteralArg(Base):
         if self.lit_type == LiteralType.float and type(self.value) is not float:
             raise ValueError(
                 "BeliefLiteralArg with lit_type='float' must use a float value."
-            )
-        if self.lit_type == LiteralType.bool and type(self.value) is not bool:
-            raise ValueError(
-                "BeliefLiteralArg with lit_type='bool' must use a bool value."
             )
         return self
 

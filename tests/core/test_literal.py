@@ -18,8 +18,6 @@ from doxa.core.literal_type import LiteralType
             r"a\\b",
         ),  # NOTE: your from_ax does NOT unescape; it keeps backslashes
         ('"a\\"b"', LiteralType.str, r"a\"b"),  # NOTE: keeps backslash+quote sequence
-        ("true", LiteralType.bool, True),
-        ("false", LiteralType.bool, False),
         ("0", LiteralType.int, 0),
         ("-12", LiteralType.int, -12),
         ("+12", LiteralType.int, 12),
@@ -67,13 +65,6 @@ def test_literal_to_ax_string_wraps_double_quotes():
     assert lit.to_ax() == '"hello"'
 
 
-def test_literal_to_ax_bool_lowercase():
-    lit_true = Literal(kind=BaseKind.literal, datatype=LiteralType.bool, value=True)
-    lit_false = Literal(kind=BaseKind.literal, datatype=LiteralType.bool, value=False)
-    assert lit_true.to_ax() == "true"
-    assert lit_false.to_ax() == "false"
-
-
 @pytest.mark.parametrize(
     "value, expected",
     [
@@ -100,8 +91,6 @@ def test_literal_to_ax_numeric(value, expected):
     [
         '"hello"',
         '"foo bar"',
-        "true",
-        "false",
         "123",
         "-7",
         "3.14",

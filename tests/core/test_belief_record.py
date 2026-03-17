@@ -47,22 +47,6 @@ def test_belief_literal_arg_from_ax_float() -> None:
     assert arg.to_ax() == "3.14"
 
 
-def test_belief_literal_arg_from_ax_bool_true() -> None:
-    arg = BeliefLiteralArg.from_ax("true")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is True
-    assert arg.to_ax() == "true"
-
-
-def test_belief_literal_arg_from_ax_bool_false() -> None:
-    arg = BeliefLiteralArg.from_ax("false")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is False
-    assert arg.to_ax() == "false"
-
-
 def test_belief_literal_arg_rejects_invalid_literal() -> None:
     with pytest.raises(ValueError, match="Invalid belief literal argument"):
         BeliefLiteralArg.from_ax("not_a_literal")
@@ -85,16 +69,6 @@ def test_belief_literal_arg_rejects_wrong_type_for_float() -> None:
             term_kind=TermKind.lit,
             lit_type=LiteralType.float,
             value=3,
-        )
-
-
-def test_belief_literal_arg_rejects_wrong_type_for_bool() -> None:
-    with pytest.raises(ValidationError):
-        BeliefLiteralArg(
-            kind=BaseKind.belief_arg,
-            term_kind=TermKind.lit,
-            lit_type=LiteralType.bool,
-            value=1,
         )
 
 

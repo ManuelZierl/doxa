@@ -65,22 +65,6 @@ def test_constraint_literal_arg_from_ax_float() -> None:
     assert arg.to_ax() == "3.14"
 
 
-def test_constraint_literal_arg_from_ax_bool_true() -> None:
-    arg = ConstraintLiteralArg.from_ax("true")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is True
-    assert arg.to_ax() == "true"
-
-
-def test_constraint_literal_arg_from_ax_bool_false() -> None:
-    arg = ConstraintLiteralArg.from_ax("false")
-
-    assert arg.lit_type == LiteralType.bool
-    assert arg.value is False
-    assert arg.to_ax() == "false"
-
-
 def test_constraint_literal_arg_rejects_invalid_literal() -> None:
     with pytest.raises(ValueError, match="Invalid literal argument"):
         ConstraintLiteralArg.from_ax("not_a_literal")
@@ -105,17 +89,6 @@ def test_constraint_literal_arg_rejects_wrong_type_for_float() -> None:
             term_kind="lit",
             lit_type=LiteralType.float,
             value=3,
-        )
-
-
-def test_constraint_literal_arg_rejects_wrong_type_for_bool() -> None:
-    with pytest.raises(ValidationError):
-        ConstraintLiteralArg(
-            kind=BaseKind.goal_arg,
-            pos=0,
-            term_kind="lit",
-            lit_type=LiteralType.bool,
-            value=1,
         )
 
 
@@ -352,92 +325,3 @@ def test_constraint_string_literal_round_trip() -> None:
     assert reparsed.model_dump(exclude={"created_at", "updated_at"}) == (
         original.model_dump(exclude={"created_at", "updated_at"})
     )
-
-
-# Sig syntax tests
-def test_constraint_from_ax_multi_regular_constraint() -> None:
-    """from_ax_multi should work with regular constraints too."""
-    constraints = Constraint.from_ax_multi("!:- parent(X, Y), not person(X)")
-
-    assert len(constraints) == 1
-    assert constraints[0].to_ax() == "!:- parent(X, Y), not person(X)"
-
-
-def test_constraint_from_ax_multi_sig_basic() -> None:
-    """Test basic sig syntax expansion."""
-    constraints = Constraint.from_ax_multi("sig(parent, [person, person])")
-
-    assert len(constraints) == 2
-
-    # First constraint: !:- parent(X0, X1), not person(X0)
-    c1 = constraints[0]
-    assert len(c1.goals) == 2
-    assert c1.goals[0].pred_name == "parent"
-    assert c1.goals[0].pred_arity == 2
-    assert c1.goals[0].negated is False
-    assert len(c1.goals[0].goal_args) == 2
-    assert c1.goals[0].goal_args[0].var.name == "X0"
-    assert c1.goals[0].goal_args[1].var.name == "X1"
-
-    assert c1.goals[1].pred_name == "person"
-    assert c1.goals[1].pred_arity == 1
-    assert c1.goals[1].negated is True
-    assert c1.goals[1].goal_args[0].var.name == "X0"
-
-    # Second constraint: !:- parent(X0, X1), not person(X1)
-    c2 = constraints[1]
-    assert len(c2.goals) == 2
-    assert c2.goals[0].pred_name == "parent"
-    assert c2.goals[0].pred_arity == 2
-    assert c2.goals[1].pred_name == "person"
-    assert c2.goals[1].pred_arity == 1
-    assert c2.goals[1].negated is True
-    assert c2.goals[1].goal_args[0].var.name == "X1"
-
-
-def test_constraint_from_ax_multi_sig_three_args() -> None:
-    """Test sig syntax with three arguments."""
-    constraints = Constraint.from_ax_multi("sig(triple, [entity, relation, entity])")
-
-    assert len(constraints) == 3
-
-    # Check each constraint checks a different argument
-    assert constraints[0].goals[1].goal_args[0].var.name == "X0"
-    assert constraints[0].goals[1].pred_name == "entity"
-
-    assert constraints[1].goals[1].goal_args[0].var.name == "X1"
-    assert constraints[1].goals[1].pred_name == "relation"
-
-    assert constraints[2].goals[1].goal_args[0].var.name == "X2"
-    assert constraints[2].goals[1].pred_name == "entity"
-
-
-def test_constraint_from_ax_multi_sig_single_arg() -> None:
-    """Test sig syntax with single argument."""
-    constraints = Constraint.from_ax_multi("sig(person, [entity])")
-
-    assert len(constraints) == 1
-    assert constraints[0].goals[0].pred_name == "person"
-    assert constraints[0].goals[0].pred_arity == 1
-    assert constraints[0].goals[1].pred_name == "entity"
-    assert constraints[0].goals[1].goal_args[0].var.name == "X0"
-
-
-def test_constraint_from_ax_rejects_sig_syntax() -> None:
-    """from_ax should reject sig syntax and suggest from_ax_multi."""
-    with pytest.raises(
-        ValueError, match="sig\\(\\) syntax expands to multiple constraints"
-    ):
-        Constraint.from_ax("sig(parent, [person, person])")
-
-
-def test_constraint_sig_to_ax_round_trip() -> None:
-    """Test that sig-generated constraints can be serialized and reparsed."""
-    constraints = Constraint.from_ax_multi("sig(parent, [person, person])")
-
-    # Each constraint should serialize correctly
-    for c in constraints:
-        reparsed = Constraint.from_ax(c.to_ax())
-        assert reparsed.model_dump(exclude={"created_at", "updated_at"}) == (
-            c.model_dump(exclude={"created_at", "updated_at"})
-        )

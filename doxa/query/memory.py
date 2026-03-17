@@ -331,8 +331,6 @@ def _match_head(
 
 def _numeric(val: Any) -> Optional[float]:
     """Extract a float from a Python value; returns None for non-numeric types."""
-    if isinstance(val, bool):
-        return None  # bool subclasses int but is not numeric here
     if isinstance(val, (int, float)):
         return float(val)
     return None
@@ -414,7 +412,10 @@ def _solve(
                 collector.record(
                     "rule_depth_limit",
                     {
-                        "goal": {"pred": goal.pred, "args": [_term_repr(a) for a in goal.args]},
+                        "goal": {
+                            "pred": goal.pred,
+                            "args": [_term_repr(a) for a in goal.args],
+                        },
                         "depth": depth,
                         "max_depth": max_depth,
                     },
@@ -486,8 +487,16 @@ def _solve(
             ):
                 # Same variable – trivially equal
                 yield from _solve(
-                    rest_goals, subst, fact_index, rules, asof, policy, depth, max_depth,
-                    collector, for_negation_probe,
+                    rest_goals,
+                    subst,
+                    fact_index,
+                    rules,
+                    asof,
+                    policy,
+                    depth,
+                    max_depth,
+                    collector,
+                    for_negation_probe,
                 )
             # else: two distinct unbound variables – no solution
             return
@@ -589,8 +598,16 @@ def _solve(
                 and nlo <= nx <= nhi
             ):
                 yield from _solve(
-                    rest_goals, subst, fact_index, rules, asof, policy, depth, max_depth,
-                    collector, for_negation_probe,
+                    rest_goals,
+                    subst,
+                    fact_index,
+                    rules,
+                    asof,
+                    policy,
+                    depth,
+                    max_depth,
+                    collector,
+                    for_negation_probe,
                 )
             return
 
@@ -603,8 +620,16 @@ def _solve(
         try:
             if op_fn(a_val, b_val):
                 yield from _solve(
-                    rest_goals, subst, fact_index, rules, asof, policy, depth, max_depth,
-                    collector, for_negation_probe,
+                    rest_goals,
+                    subst,
+                    fact_index,
+                    rules,
+                    asof,
+                    policy,
+                    depth,
+                    max_depth,
+                    collector,
+                    for_negation_probe,
                 )
         except TypeError:
             pass
@@ -618,8 +643,16 @@ def _solve(
         has_any = any(
             True
             for _ in _solve(
-                [positive], subst, fact_index, rules, asof, policy, depth + 1, max_depth,
-                collector, for_negation_probe=True,
+                [positive],
+                subst,
+                fact_index,
+                rules,
+                asof,
+                policy,
+                depth + 1,
+                max_depth,
+                collector,
+                for_negation_probe=True,
             )
         )
         if not has_any:
@@ -636,8 +669,16 @@ def _solve(
                     },
                 )
             yield from _solve(
-                rest_goals, subst, fact_index, rules, asof, policy, depth, max_depth,
-                collector, for_negation_probe,
+                rest_goals,
+                subst,
+                fact_index,
+                rules,
+                asof,
+                policy,
+                depth,
+                max_depth,
+                collector,
+                for_negation_probe,
             )
         return
 
@@ -672,8 +713,16 @@ def _solve(
                     },
                 )
             yield from _solve(
-                rest_goals, new_subst, fact_index, rules, asof, policy, depth, max_depth,
-                collector, for_negation_probe,
+                rest_goals,
+                new_subst,
+                fact_index,
+                rules,
+                asof,
+                policy,
+                depth,
+                max_depth,
+                collector,
+                for_negation_probe,
             )
 
     # ── positive atom – try rules ─────────────────────────────────────────────
@@ -895,16 +944,7 @@ class InMemoryQueryEngine(QueryEngine):
                     for arg in goal.args:
                         assert isinstance(arg, _GroundTerm)
                         val = arg.value
-                        if isinstance(val, bool):
-                            belief_args.append(
-                                BeliefLiteralArg(
-                                    kind=BaseKind.belief_arg,
-                                    term_kind="lit",
-                                    lit_type="bool",
-                                    value=val,
-                                )
-                            )
-                        elif isinstance(val, int):
+                        if isinstance(val, int):
                             belief_args.append(
                                 BeliefLiteralArg(
                                     kind=BaseKind.belief_arg,

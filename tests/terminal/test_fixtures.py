@@ -11,16 +11,18 @@ fixture requires only dropping two files in a new folder.
 
 from __future__ import annotations
 
-import subprocess
+import sys
 from pathlib import Path
+from io import StringIO
 
 import pytest
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
-# Resolve CLI path relative to the project root so it works from any CWD.
+# Import the CLI main function directly instead of relying on installed package
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-CLI = PROJECT_ROOT / ".venv" / "Scripts" / "doxa.exe"
+sys.path.insert(0, str(PROJECT_ROOT))
+from doxa.cli.main import main  # noqa: E402
 
 
 def _strip_banner(text: str) -> str:
@@ -59,27 +61,30 @@ def _collect_fixtures() -> list[tuple[str, Path]]:
 @pytest.mark.parametrize(
     "name,fixture_dir", _collect_fixtures(), ids=[n for n, _ in _collect_fixtures()]
 )
-def test_fixture(name: str, fixture_dir: Path) -> None:
-    if not CLI.exists():
-        pytest.skip(f"doxa CLI not found at {CLI}")
-
+def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
     # utf-8-sig strips the UTF-8 BOM (0xEF 0xBB 0xBF) if present, so both
     # BOM and non-BOM files are handled transparently.
     input_text = (fixture_dir / "input.doxa").read_text(encoding="utf-8-sig")
     expected_raw = (fixture_dir / "expected.txt").read_text(encoding="utf-8-sig")
 
-    result = subprocess.run(
-        [str(CLI), "--tmp"],
-        input=input_text,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=30,
-    )
+    # Mock stdin with the input text
+    monkeypatch.setattr("sys.stdin", StringIO(input_text))
 
-    actual = _normalise(_strip_banner(result.stdout))
+    # Mock sys.argv to pass --tmp flag
+    monkeypatch.setattr("sys.argv", ["doxa", "--tmp"])
+
+    # Run the CLI main function
+    try:
+        main()
+    except SystemExit:
+        # CLI may call sys.exit(), which is expected
+        pass
+
+    # Capture the output
+    captured = capsys.readouterr()
+    actual = _normalise(_strip_banner(captured.out))
     expected = _normalise(expected_raw)
 
-    assert actual == expected, (
-        f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
-    )
+    assert (
+        actual == expected
+    ), f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"

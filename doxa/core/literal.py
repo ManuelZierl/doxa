@@ -16,7 +16,7 @@ _DQ_STR_RE = re.compile(r'^"(?:\\.|[^\\\"\n\r])*"$')
 class Literal(Base):
     kind: TypingLiteral[BaseKind.literal] = Field(...)
 
-    value: Union[str, int, float, bool] = Field(
+    value: Union[str, int, float] = Field(
         ..., description="Literal value in AX source form."
     )
     datatype: LiteralType = Field(..., description="Literal type tag used by AX.")
@@ -27,8 +27,6 @@ class Literal(Base):
                 raise ValueError("Multiline string literals are not allowed")
             s = self.value.replace("\\", "\\\\").replace('"', '\\"')
             return f'"{s}"'
-        if self.datatype == LiteralType.bool:
-            return "true" if bool(self.value) else "false"
         return str(self.value)
 
     @classmethod
@@ -39,12 +37,6 @@ class Literal(Base):
         # string literal
         if _DQ_STR_RE.fullmatch(inp):
             return cls(kind=BaseKind.literal, datatype=LiteralType.str, value=inp[1:-1])
-
-        # bool
-        if inp == "true":
-            return cls(kind=BaseKind.literal, datatype=LiteralType.bool, value=True)
-        if inp == "false":
-            return cls(kind=BaseKind.literal, datatype=LiteralType.bool, value=False)
 
         # int
         if _INT_RE.fullmatch(inp):

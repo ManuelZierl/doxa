@@ -161,12 +161,6 @@ def _contains_top_level_rule_operator(inp: str) -> bool:
     return False
 
 
-def _is_sig_statement(inp: str) -> bool:
-    """Check if the statement is a sig() declaration."""
-    s = inp.strip()
-    return s.startswith("sig(")
-
-
 class Branch(Base, AuditMixin):
     kind: Literal[BaseKind.branch] = Field(...)
     name: str = Field(
@@ -252,13 +246,12 @@ class Branch(Base, AuditMixin):
                 if key not in pred_map:
                     pred_map[key] = pred
                     predicates.append(pred)
-            elif _is_sig_statement(stripped):
-                # sig() expands to multiple constraints
-                expanded_constraints = Constraint.from_ax_multi(stripped)
-                for constraint in expanded_constraints:
-                    constraints.append(constraint)
-                    cls._collect_entities_from_constraint(constraint, ent_map)
-                    cls._collect_predicates_from_constraint(constraint, pred_map)
+                    # Generate type-checking constraints if type_list is present
+                    type_constraints = pred.generate_type_constraints()
+                    for constraint in type_constraints:
+                        constraints.append(constraint)
+                        cls._collect_entities_from_constraint(constraint, ent_map)
+                        cls._collect_predicates_from_constraint(constraint, pred_map)
             elif stripped.startswith("!:-"):
                 constraint = Constraint.from_ax(stripped)
                 constraints.append(constraint)
