@@ -611,6 +611,38 @@ def _solve(
                 )
             return
 
+        # Type predicates: int/1, string/1, float/1, entity/1
+        if goal.op in (Builtin.int, Builtin.string, Builtin.float, Builtin.entity):
+            val = _resolve(goal.args[0], subst)
+            if val is None:
+                return  # Type predicates require ground argument
+
+            type_matches = False
+            if goal.op == Builtin.int:
+                type_matches = isinstance(val, int) and not isinstance(val, bool)
+            elif goal.op == Builtin.string:
+                type_matches = isinstance(val, str)
+            elif goal.op == Builtin.float:
+                type_matches = isinstance(val, float)
+            elif goal.op == Builtin.entity:
+                # entity/1 matches any string value (entity names are strings)
+                type_matches = isinstance(val, str)
+
+            if type_matches:
+                yield from _solve(
+                    rest_goals,
+                    subst,
+                    fact_index,
+                    rules,
+                    asof,
+                    policy,
+                    depth,
+                    max_depth,
+                    collector,
+                    for_negation_probe,
+                )
+            return
+
         # ne / lt / leq / gt / geq: filter only (both args must be ground)
         a_val = _resolve(goal.args[0], subst)
         b_val = _resolve(goal.args[1], subst)

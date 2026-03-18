@@ -272,6 +272,7 @@ class Branch(Base, AuditMixin):
                         kind=BaseKind.predicate,
                         name=record.pred_name,
                         arity=record.pred_arity,
+                        type_list=["entity"] * record.pred_arity,
                     )
 
         predicates.extend(p for p in pred_map.values() if p not in predicates)
@@ -338,6 +339,7 @@ class Branch(Base, AuditMixin):
                 kind=BaseKind.predicate,
                 name=rule.head_pred_name,
                 arity=rule.head_pred_arity,
+                type_list=["entity"] * rule.head_pred_arity,
             )
         for goal in rule.goals:
             if hasattr(goal, "pred_name") and hasattr(goal, "pred_arity"):
@@ -347,6 +349,7 @@ class Branch(Base, AuditMixin):
                         kind=BaseKind.predicate,
                         name=goal.pred_name,
                         arity=goal.pred_arity,
+                        type_list=["entity"] * goal.pred_arity,
                     )
 
     @classmethod
@@ -361,6 +364,7 @@ class Branch(Base, AuditMixin):
                         kind=BaseKind.predicate,
                         name=goal.pred_name,
                         arity=goal.pred_arity,
+                        type_list=["entity"] * goal.pred_arity,
                     )
 
     @classmethod

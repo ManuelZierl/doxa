@@ -190,6 +190,45 @@ Solves for any one unknown argument.
 | `div(A, B, C)`       | A / B = C                                                         |
 | `between(X, Lo, Hi)` | Lo ≤ X ≤ Hi — all three must be bound; check only, no enumeration |
 
+### Built-in: type predicates (arity 1)
+
+Type predicates check the runtime type of their argument. The argument must be bound.
+
+| Builtin      | Meaning                                          |
+|--------------|--------------------------------------------------|
+| `int(X)`     | X is an integer value                            |
+| `float(X)`   | X is a floating-point value                      |
+| `string(X)`  | X is a string literal value                      |
+| `entity(X)`  | X is an entity (any string identifier)           |
+
+**Type predicates in predicate declarations:**
+
+Type predicates can be used in predicate type lists to automatically generate type-checking constraints:
+
+```doxa
+pred euro_value/2 [entity, int].
+```
+
+This automatically generates:
+```doxa
+!:- euro_value(X0, X1), not entity(X0).
+!:- euro_value(X0, X1), not int(X1).
+```
+
+**Default type annotation:**
+
+When a predicate is declared without a type list, it automatically defaults to `[entity, entity, ...]` for all argument positions:
+
+```doxa
+pred parent/2.
+```
+
+is equivalent to:
+
+```doxa
+pred parent/2 [entity, entity].
+```
+
 Infix operators (`>=`, `<`, etc.) are **not valid syntax** in rule bodies or queries.
 
 ---
@@ -264,7 +303,7 @@ Interactive-mode only. Prefix is `/-`:
 - Every predicate must be declared before its first use.
 - `pred` annotations accept `description` only — any other key is a parse error.
 - `pred` type lists are optional; when provided, they must match the declared arity.
-- **Predicate names cannot be reserved keywords** (`not`, `pred`) or builtin names (`eq`, `ne`, `lt`, `leq`, `gt`, `geq`, `add`, `sub`, `mul`, `div`, `between`).
+- **Predicate names cannot be reserved keywords** (`not`, `pred`) or builtin names (`eq`, `ne`, `lt`, `leq`, `gt`, `geq`, `add`, `sub`, `mul`, `div`, `between`, `int`, `string`, `float`, `entity`).
 - Identifiers (predicate names, entity ids) must be ASCII only.
 - `between` does not enumerate — all three arguments must already be bound.
 - Builtin goals cannot be negated with `not`.

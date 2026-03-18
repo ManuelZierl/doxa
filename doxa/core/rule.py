@@ -408,7 +408,7 @@ class RuleBuiltinGoal(RuleGoalBase):
 
     @model_validator(mode="after")
     def validate_builtin_arity(self) -> "RuleBuiltinGoal":
-        expected = BUILTIN_ARITY[self.builtin_name.value]
+        expected = BUILTIN_ARITY[self.builtin_name]
         if len(self.goal_args) != expected:
             raise ValueError(
                 f"Builtin '{self.builtin_name}' expects {expected} arguments, got {len(self.goal_args)}."
