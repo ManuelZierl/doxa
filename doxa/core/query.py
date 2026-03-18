@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
+from doxa.core.epistemic_semantics import (
+    EpistemicSemanticsConfig,
+    DEFAULT_EPISTEMIC_SEMANTICS,
+)
 from doxa.core.goal import (
     Goal,
     goal_from_doxa,
@@ -15,19 +20,28 @@ from doxa.core.schema_utils import compact_schema_for_llm
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 
+class QueryFocus(str, Enum):
+    all = "all"
+    support = "support"
+    disbelief = "disbelief"
+    contradiction = "contradiction"
+    ignorance = "ignorance"
+
 
 class QueryOptions(BaseModel):
     """Validated query execution options.
 
-    policy : "report" (default) | "credulous" | "skeptical"
-        report    → no belief-score filter (all facts pass)
-        credulous → only facts where b > d
-        skeptical → only facts where b > d  (same gate as credulous)
+    query_time:
+        Query-time default used when more specific temporal cutoffs are omitted.
+        If omitted, the engine uses current UTC time at evaluation time.
 
-    asof : ISO-8601 string or datetime
-        Restrict facts to those whose validity window [vf, vt] contains asof.
-        A fact with vf=None is valid from the beginning of time.
-        A fact with vt=None is valid until the end of time.
+    valid_at:
+        Explicit validity-time cutoff against [vf, vt].
+        If omitted, falls back to query_time.
+
+    known_at:
+        Explicit knowledge-time cutoff against et.
+        If omitted, falls back to query_time.
 
     limit : int >= 0
         Return at most this many result bindings (applied after ordering).
@@ -46,20 +60,58 @@ class QueryOptions(BaseModel):
         Hard cap on recursive rule-application depth.  Default 24.
     """
 
-    policy: Literal["report", "credulous", "skeptical"] = "report"
-    asof: Optional[datetime] = None
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query_time: Optional[datetime] = None
+    valid_at: Optional[datetime] = None
+    known_at: Optional[datetime] = None
+
+    epistemic_semantics: EpistemicSemanticsConfig = Field(
+        default_factory=lambda: DEFAULT_EPISTEMIC_SEMANTICS
+    )
+
     limit: Optional[int] = Field(default=None, ge=0)
     offset: int = Field(default=0, ge=0)
     order_by: List[str] = Field(default_factory=list)
     distinct: bool = False
     max_depth: int = Field(default=24, gt=0)
     explain: Literal["false", "true", "human"] = "false"
+    focus: QueryFocus = QueryFocus.all
 
-    model_config = {"extra": "forbid"}
-
-    @field_validator("asof", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _coerce_asof(cls, v: Any) -> Any:
+    def _inflate_flat_epistemic_semantics(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+
+        data = dict(raw)
+
+        nested = data.get("epistemic_semantics")
+        flat_keys_present = any(
+            k in data for k in EpistemicSemanticsConfig.model_fields.keys()
+        )
+
+        if nested is not None and flat_keys_present:
+            raise ValueError(
+                "Do not mix nested 'epistemic_semantics' with flat epistemic "
+                "semantics option keys."
+            )
+
+        if nested is None and flat_keys_present:
+            semantics_kwargs = {}
+            for key in EpistemicSemanticsConfig.model_fields.keys():
+                if key in data:
+                    semantics_kwargs[key] = data.pop(key)
+
+            baseline = DEFAULT_EPISTEMIC_SEMANTICS.model_dump()
+            baseline.update(semantics_kwargs)
+            data["epistemic_semantics"] = baseline
+
+        return data
+
+    @field_validator("query_time", "valid_at", "known_at", mode="before")
+    @classmethod
+    def _coerce_datetime(cls, v: Any) -> Any:
         if isinstance(v, str):
             return datetime.fromisoformat(v.replace("Z", "+00:00"))
         return v
@@ -97,7 +149,11 @@ class QueryOptions(BaseModel):
     def to_doxa_parts(self) -> List[str]:
         """Return a list of ``key:value`` strings for non-default options."""
         parts: List[str] = []
-        dump = self.model_dump(exclude_defaults=True, exclude_none=True)
+        dump = self.model_dump(
+            exclude_defaults=True,
+            exclude_none=True,
+            exclude={"epistemic_semantics"},
+        )
         for key, value in dump.items():
             if isinstance(value, datetime):
                 iso = value.isoformat()
@@ -112,6 +168,14 @@ class QueryOptions(BaseModel):
                 parts.append(f'{key}:"{escaped}"')
             else:
                 parts.append(f"{key}:{value}")
+
+        current_dict = self.epistemic_semantics.model_dump()
+        default_dict = DEFAULT_EPISTEMIC_SEMANTICS.model_dump()
+
+        for key in EpistemicSemanticsConfig.model_fields.keys():
+            if current_dict[key] != default_dict[key]:
+                parts.append(f'{key}:"{current_dict[key]}"')
+
         return parts
 
 
@@ -127,7 +191,11 @@ class Query(Base):
     )
     options: QueryOptions = Field(
         default_factory=QueryOptions,
-        description="Query execution options (policy, asof, limit, offset, order_by, distinct, max_depth).",
+        description=(
+            "Query execution options including time cutoffs "
+            "(query_time / valid_at / known_at), epistemic_semantics, "
+            "limit, offset, order_by, distinct, max_depth, and explain."
+        ),
     )
 
     @model_validator(mode="after")
