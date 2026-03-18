@@ -5,6 +5,7 @@ from pydantic import Field, field_validator, model_validator
 
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
+from doxa.core.builtins import Builtin, BUILTIN_ARITY
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_top_level
 
@@ -27,12 +28,6 @@ _PRED_NAME_RE = re.compile(r"^[a-z][A-Za-z0-9_]*$")
 
 # Reserved keywords that cannot be used as predicate names
 _RESERVED_KEYWORDS = {"not", "pred"}
-
-# Builtin predicate names that cannot be redeclared
-_BUILTIN_NAMES = {
-    "eq", "ne", "lt", "leq", "gt", "geq",
-    "add", "sub", "mul", "div", "between"
-}
 
 
 class Predicate(Base):
@@ -75,10 +70,10 @@ class Predicate(Base):
                 f"Reserved keywords: {sorted(_RESERVED_KEYWORDS)}"
             )
 
-        if v in _BUILTIN_NAMES:
+        if v in [b.value for b in Builtin]:
             raise ValueError(
                 f"Predicate name '{v}' is a builtin predicate and cannot be redeclared. "
-                f"Builtin predicates: {sorted(_BUILTIN_NAMES)}"
+                f"Builtin predicates: {sorted([b.value for b in Builtin])}"
             )
 
         return v
@@ -107,7 +102,11 @@ class Predicate(Base):
     def to_doxa(self) -> str:
         head = f"pred {self.name}/{self.arity}"
 
-        if self.type_list is not None:
+        # Only output type_list if it's not the default [entity, entity, ...]
+        if (
+            self.type_list is not None
+            and self.type_list != [Builtin.entity.value] * self.arity
+        ):
             types_str = ", ".join(self.type_list)
             head = f"{head} [{types_str}]"
 
@@ -134,16 +133,20 @@ class Predicate(Base):
                 "'pred <name>/<arity> @{description:\"...\"}'."
             )
 
+        arity = int(m.group("arity"))
         kwargs: Dict[str, object] = {
             "kind": BaseKind.predicate,
             "name": m.group("name"),
-            "arity": int(m.group("arity")),
+            "arity": arity,
         }
 
         types_str = m.group("types")
         if types_str:
             type_parts = split_top_level(types_str.strip())
             kwargs["type_list"] = [t.strip() for t in type_parts]
+        else:
+            # Auto-generate type_list with 'entity' for all positions
+            kwargs["type_list"] = [Builtin.entity.value] * arity
 
         annotation = m.group("annotation")
         if annotation:
@@ -177,7 +180,14 @@ class Predicate(Base):
 
         constraints: List[Constraint] = []
 
+        # Builtin type predicates that are evaluated at runtime, not via constraints
+        builtin_type_predicates = {b.value for b in Builtin if BUILTIN_ARITY[b] == 1}
+
         for arg_idx, type_name in enumerate(self.type_list):
+            # Skip builtin type predicates - they're checked at runtime, not via constraints
+            if type_name in builtin_type_predicates:
+                continue
+
             # Create the main predicate goal: pred_name(X0, X1, ...)
             pred_args: List[VarArg] = []
             for i in range(self.arity):

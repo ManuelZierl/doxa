@@ -14,20 +14,28 @@ class Builtin(str, Enum):
     mul = "mul"
     div = "div"
     between = "between"
+    int = "int"
+    string = "string"
+    float = "float"
+    entity = "entity"
 
 
 # Expected argument count per builtin.
 # Used by both BuiltinGoal (query goals) and RuleBuiltinGoal (rule body goals).
-BUILTIN_ARITY: Dict[str, int] = {
-    "eq": 2,
-    "ne": 2,
-    "lt": 2,
-    "leq": 2,
-    "gt": 2,
-    "geq": 2,
-    "add": 3,
-    "sub": 3,
-    "mul": 3,
-    "div": 3,
-    "between": 3,
+BUILTIN_ARITY: Dict[Builtin, int] = {
+    Builtin.eq: 2,
+    Builtin.ne: 2,
+    Builtin.lt: 2,
+    Builtin.leq: 2,
+    Builtin.gt: 2,
+    Builtin.geq: 2,
+    Builtin.add: 3,
+    Builtin.sub: 3,
+    Builtin.mul: 3,
+    Builtin.div: 3,
+    Builtin.between: 3,
+    Builtin.int: 1,
+    Builtin.string: 1,
+    Builtin.float: 1,
+    Builtin.entity: 1,
 }

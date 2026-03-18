@@ -120,6 +120,7 @@ def test_predicate_round_trip_without_description() -> None:
         kind=BaseKind.predicate,
         name="parent",
         arity=2,
+        type_list=["entity", "entity"],
     )
 
     reparsed = Predicate.from_doxa(original.to_doxa())
@@ -133,6 +134,7 @@ def test_predicate_round_trip_with_description() -> None:
         name="source_document",
         arity=1,
         description='source_document(S): provenance source entity for "facts"',
+        type_list=["entity"],
     )
 
     reparsed = Predicate.from_doxa(original.to_doxa())
@@ -276,10 +278,9 @@ def test_predicate_generate_type_constraints_three_args() -> None:
     pred = Predicate.from_doxa("pred triple/3 [entity, relation, entity]")
     constraints = pred.generate_type_constraints()
 
-    assert len(constraints) == 3
-    assert constraints[0].goals[1].pred_name == "entity"
-    assert constraints[1].goals[1].pred_name == "relation"
-    assert constraints[2].goals[1].pred_name == "entity"
+    # Only 'relation' generates a constraint; 'entity' is a builtin type predicate
+    assert len(constraints) == 1
+    assert constraints[0].goals[1].pred_name == "relation"
 
 
 def test_predicate_generate_type_constraints_none_when_no_type_list() -> None:
@@ -320,14 +321,14 @@ def test_branch_type_list_with_multiple_predicates() -> None:
     """Test multiple predicates with type lists."""
     branch = Branch.from_doxa(
         """
-        pred entity/1.
+        pred person/1.
         pred relation/1.
-        pred parent/2 [entity, entity].
-        pred triple/3 [entity, relation, entity].
+        pred parent/2 [person, person].
+        pred triple/3 [person, relation, person].
         """
     )
 
-    # parent generates 2 constraints, triple generates 3
+    # parent generates 2 constraints (person, person), triple generates 3 (person, relation, person)
     assert len(branch.constraints) == 5
 
 
@@ -384,7 +385,5 @@ def test_predicate_type_list_single_arg() -> None:
     pred = Predicate.from_doxa("pred person/1 [entity]")
     constraints = pred.generate_type_constraints()
 
-    assert len(constraints) == 1
-    assert constraints[0].goals[0].pred_name == "person"
-    assert constraints[0].goals[0].pred_arity == 1
-    assert constraints[0].goals[1].pred_name == "entity"
+    # 'entity' is a builtin type predicate, so no constraints are generated
+    assert len(constraints) == 0
