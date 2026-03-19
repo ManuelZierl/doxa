@@ -110,11 +110,19 @@ def _run_query(state: TerminalState, text: str) -> None:
         print(f"  Query error: {exc}")
         return
 
-    if not result.success:
+    if not result.answers:
         print("  No results.")
     else:
-        for i, binding in enumerate(result.bindings, 1):
-            print(f"  {i}: {binding.values}")
+        for i, answer in enumerate(result.answers, 1):
+            parts = []
+            if answer.bindings:
+                parts.append(
+                    ", ".join(f"{k}={v!r}" for k, v in answer.bindings.items())
+                )
+            parts.append(
+                f"b={answer.b:.4g}, d={answer.d:.4g}, status={answer.belnap_status.value}"
+            )
+            print(f"  {i}: {' | '.join(parts)}")
 
     if result.explain is not None:
         print()

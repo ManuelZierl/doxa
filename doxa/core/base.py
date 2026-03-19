@@ -5,7 +5,6 @@ from doxa.core.base_kinds import BaseKind
 class Base(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     kind: BaseKind = Field(..., description="the kind of this Ax Element")
-    # _DB_SCHEMA = ...
 
     def to_doxa(self) -> str:
         raise NotImplementedError()

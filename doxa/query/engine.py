@@ -7,8 +7,8 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from doxa.core.branch import Branch
 from doxa.core.epistemic_semantics import (
-BodyTruthSemantics,
-BodyFalsitySemantics,
+    BodyTruthSemantics,
+    BodyFalsitySemantics,
     EpistemicSemanticsCapabilities,
     RulePropagationSemantics,
     ConstraintPropagationSemantics,
@@ -55,8 +55,12 @@ class EngineInfo:
             support_aggregation=(SupportAggregationSemantics.noisy_or,),
             belnap_status=(BelnapStatusSemantics.nonzero,),
             non_atom=(NonAtomSemantics.crisp_filters,),
-            rule_applicability=(RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity,),
-            constraint_applicability=(ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity,),
+            rule_applicability=(
+                RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity,
+            ),
+            constraint_applicability=(
+                ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity,
+            ),
         )
     )
     default_epistemic_semantics: EpistemicSemanticsConfig = field(
@@ -191,7 +195,9 @@ class QueryEngine(ABC):
             unsupported["rule_applicability"] = config.rule_applicability.value
 
         if config.constraint_applicability not in caps.constraint_applicability:
-            unsupported["constraint_applicability"] = config.constraint_applicability.value
+            unsupported["constraint_applicability"] = (
+                config.constraint_applicability.value
+            )
 
         if unsupported:
             details = ", ".join(f"{k}={v!r}" for k, v in unsupported.items())

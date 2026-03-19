@@ -44,6 +44,7 @@ class RuleApplicabilitySemantics(str, Enum):
     body_truth_only = "body_truth_only"
     body_truth_discounted_by_body_falsity = "body_truth_discounted_by_body_falsity"
 
+
 class ConstraintApplicabilitySemantics(str, Enum):
     body_truth_only = "body_truth_only"
     body_truth_discounted_by_body_falsity = "body_truth_discounted_by_body_falsity"
@@ -65,8 +66,12 @@ class EpistemicSemanticsConfig(BaseModel):
     )
     belnap_status: BelnapStatusSemantics = Field(default=BelnapStatusSemantics.nonzero)
     non_atom: NonAtomSemantics = Field(default=NonAtomSemantics.crisp_filters)
-    rule_applicability: RuleApplicabilitySemantics = Field(default=RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity)
-    constraint_applicability: ConstraintApplicabilitySemantics = Field(default=ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity)
+    rule_applicability: RuleApplicabilitySemantics = Field(
+        default=RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity
+    )
+    constraint_applicability: ConstraintApplicabilitySemantics = Field(
+        default=ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity
+    )
 
 
 class EpistemicSemanticsCapabilities(BaseModel):
@@ -89,8 +94,12 @@ class EpistemicSemanticsCapabilities(BaseModel):
     non_atom: Tuple[NonAtomSemantics, ...] = Field(
         ...,
     )
-    rule_applicability: Tuple[RuleApplicabilitySemantics, ...] = Field(...,)
-    constraint_applicability: Tuple[ConstraintApplicabilitySemantics, ...] = Field(...,)
+    rule_applicability: Tuple[RuleApplicabilitySemantics, ...] = Field(
+        ...,
+    )
+    constraint_applicability: Tuple[ConstraintApplicabilitySemantics, ...] = Field(
+        ...,
+    )
 
 
 DEFAULT_EPISTEMIC_SEMANTICS = EpistemicSemanticsConfig()

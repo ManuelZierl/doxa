@@ -20,6 +20,7 @@ from doxa.core.schema_utils import compact_schema_for_llm
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 
+
 class QueryFocus(str, Enum):
     all = "all"
     support = "support"
@@ -53,9 +54,6 @@ class QueryOptions(BaseModel):
         Variable name(s) to sort results by.  A single string may be
         comma-separated (e.g. ``"X, Y"``).
 
-    distinct : bool
-        When True, deduplicate identical binding rows.
-
     max_depth : int > 0
         Hard cap on recursive rule-application depth.  Default 24.
     """
@@ -73,7 +71,6 @@ class QueryOptions(BaseModel):
     limit: Optional[int] = Field(default=None, ge=0)
     offset: int = Field(default=0, ge=0)
     order_by: List[str] = Field(default_factory=list)
-    distinct: bool = False
     max_depth: int = Field(default=24, gt=0)
     explain: Literal["false", "true", "human"] = "false"
     focus: QueryFocus = QueryFocus.all
@@ -194,7 +191,7 @@ class Query(Base):
         description=(
             "Query execution options including time cutoffs "
             "(query_time / valid_at / known_at), epistemic_semantics, "
-            "limit, offset, order_by, distinct, max_depth, and explain."
+            "limit, offset, order_by, max_depth, explain, and focus."
         ),
     )
 

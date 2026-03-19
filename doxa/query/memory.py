@@ -1,60 +1,57 @@
-"""In-memory Datalog-style query engine for AX.
-
-Evaluation strategy
--------------------
-Top-down SLD resolution (Prolog-style), extended with:
-  - Negation as Failure (NAF) for negated atom goals
-  - Builtin goal evaluation:
-      2-arg filters : ne / lt / leq / gt / geq
-      2-arg binder  : eq  (binds an unbound variable to the other side's value)
-      3-arg arith   : add / sub / mul / div  (A op B = C, solves for any one unknown)
-      3-arg range   : between(X, Lo, Hi)
-  - Belief-score filtering (report / credulous / skeptical policy)
-  - Temporal filtering via ``asof`` query option (validity window [vf, vt])
-  - Result post-processing: distinct, order_by, offset, limit
-  - Configurable recursion depth via ``max_depth`` query option
-
-Variable namespacing
---------------------
-When applying a rule at depth *d*, every rule variable ``X`` is renamed to
-``_r<d>_X`` internally.  This prevents clashes between query variables and rule
-variables across recursive calls.  The solver maintains two substitution
-dictionaries in parallel:
-
-  query_subst   – maps original query-level variable names → ground values
-  rule_subst    – maps prefixed rule variable names → ground values
-
-After solving a rule body the link table propagates rule-variable bindings
-back to the query substitution.
-
-Internal goal representation
-------------------------------
-All pydantic goal/arg objects are converted to two lightweight frozen
-dataclasses (_Atom / _Builtin) and a _Term union (_VarTerm / _GroundTerm)
-before the solver runs.  This keeps the core solver free of pydantic
-import noise and makes unit-testing the solver trivial.
-"""
-
 from __future__ import annotations
 
 import operator
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
+from doxa.core import TermKind, LiteralType
 from doxa.core.branch import Branch
 from doxa.core.builtins import Builtin
-from doxa.core.belief_record import BeliefEntityArg, BeliefLiteralArg, BeliefRecord
-from doxa.core.goal import AtomGoal, BuiltinGoal, VarArg
-from doxa.core.query import Query
-from doxa.core.rule import (
-    Rule,
-    RuleAtomGoal,
-    RuleBuiltinGoal,
+from doxa.core.belief_record import (
+    BeliefArg,
+    BeliefEntityArg,
+    BeliefLiteralArg,
+    BeliefRecord,
 )
-from doxa.query.engine import Binding, QueryEngine, QueryResult
+from doxa.core.constraint import Constraint
+from doxa.core.epistemic_semantics import (
+    BelnapStatusSemantics,
+    BodyFalsitySemantics,
+    BodyTruthSemantics,
+    ConstraintApplicabilitySemantics,
+    ConstraintPropagationSemantics,
+    EpistemicSemanticsCapabilities,
+    NonAtomSemantics,
+    RuleApplicabilitySemantics,
+    RulePropagationSemantics,
+    SupportAggregationSemantics,
+)
+from doxa.core.goal import AtomGoal, BuiltinGoal, VarArg
+from doxa.core.query import Query, QueryFocus
+from doxa.core.rule import Rule, RuleAtomGoal, RuleBuiltinGoal
+from doxa.query.engine import (
+    BelnapStatus,
+    EngineInfo,
+    QueryAnswer,
+    QueryEngine,
+    QueryResult,
+)
 
-# ── comparison-only builtin operators (ne / lt / leq / gt / geq) ─────────────
+# ---------------------------------------------------------------------------
+# Builtins
+# ---------------------------------------------------------------------------
 
 _CMP_OPS: Dict[Builtin, Any] = {
     Builtin.ne: operator.ne,
@@ -64,22 +61,20 @@ _CMP_OPS: Dict[Builtin, Any] = {
     Builtin.geq: operator.ge,
 }
 
-# ── internal term / goal types ────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Lightweight compiled representation
+# ---------------------------------------------------------------------------
 
-Subst = Dict[str, Any]  # var_name → ground value
+Subst = Dict[str, Any]
 
 
 @dataclass(frozen=True)
 class _VarTerm:
-    """A variable – may be unbound in the current substitution."""
-
-    name: str  # already prefixed when derived from a rule
+    name: str
 
 
 @dataclass(frozen=True)
 class _GroundTerm:
-    """A ground value (entity name or literal)."""
-
     value: Any
 
 
@@ -94,20 +89,63 @@ class _Atom:
 
 
 @dataclass(frozen=True)
-class _Builtin:
+class _BuiltinGoal:
     op: Builtin
-    args: Tuple[_Term, ...]  # length 2 for comparisons/eq, 3 for arith/between
+    args: Tuple[_Term, ...]
 
 
-_Goal = Union[_Atom, _Builtin]
+_Goal = Union[_Atom, _BuiltinGoal]
 
 
-# ── explain collector ────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class _EvidenceRow:
+    """
+    One grounded support row for a positive atom or derived head.
+
+    b/d are support contributions for the grounded atom under subst.
+    """
+
+    subst: Subst
+    b: float
+    d: float
+
+
+@dataclass(frozen=True)
+class _TruthRow:
+    """
+    One grounded body-success row.
+
+    support:
+        Positive truth-support for the successful body.
+
+    falsity:
+        Falsity-support for the successful body.
+    """
+
+    subst: Subst
+    support: float
+    falsity: float
+
+
+@dataclass(frozen=True)
+class _Context:
+    fact_index: Dict[Tuple[str, int], List[BeliefRecord]]
+    rules: Tuple[Rule, ...]
+    constraints: Tuple[Constraint, ...]
+    query: Query
+    effective_query_time: datetime
+    effective_valid_at: datetime
+    effective_known_at: datetime
+    max_depth: int
+    explain_enabled: bool
+
+
+# ---------------------------------------------------------------------------
+# Explain collector
+# ---------------------------------------------------------------------------
 
 
 class ExplainCollector:
-    """Collects explain trace events during query evaluation."""
-
     __slots__ = ("enabled", "events")
 
     def __init__(self, enabled: bool = False) -> None:
@@ -115,28 +153,13 @@ class ExplainCollector:
         self.events: List[Dict[str, Any]] = []
 
     def record(self, event_type: str, payload: Dict[str, Any]) -> None:
-        if not self.enabled:
-            return
-        self.events.append({"type": event_type, **payload})
+        if self.enabled:
+            self.events.append({"type": event_type, **payload})
 
 
-def _term_repr(t: _Term) -> Any:
-    """Return a JSON-friendly representation of an internal term."""
-    if isinstance(t, _GroundTerm):
-        return t.value
-    return f"?{t.name}"
-
-
-def _belief_arg_repr(arg: Any) -> Any:
-    """Return a JSON-friendly representation of a BeliefRecord arg."""
-    if isinstance(arg, BeliefEntityArg):
-        return arg.ent_name
-    if hasattr(arg, "value"):
-        return arg.value
-    return str(arg)
-
-
-# ── pydantic → internal conversion ───────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Core → internal compilation
+# ---------------------------------------------------------------------------
 
 
 def _term(arg: Any) -> _Term:
@@ -146,7 +169,7 @@ def _term(arg: Any) -> _Term:
         return _GroundTerm(arg.ent_name)
     if hasattr(arg, "value"):
         return _GroundTerm(arg.value)
-    raise TypeError(f"_term(): unrecognised arg type {type(arg)!r}")
+    raise TypeError(f"Unsupported arg type for compilation: {type(arg)!r}")
 
 
 def _prefixed_term(arg: Any, prefix: str) -> _Term:
@@ -156,10 +179,10 @@ def _prefixed_term(arg: Any, prefix: str) -> _Term:
         return _GroundTerm(arg.ent_name)
     if hasattr(arg, "value"):
         return _GroundTerm(arg.value)
-    raise TypeError(f"_prefixed_term(): unrecognised arg type {type(arg)!r}")
+    raise TypeError(f"Unsupported arg type for compilation: {type(arg)!r}")
 
 
-def _query_goals(query: Query) -> List[_Goal]:
+def _compile_query_goals(query: Query) -> List[_Goal]:
     out: List[_Goal] = []
     for g in query.goals:
         if isinstance(g, AtomGoal):
@@ -172,19 +195,21 @@ def _query_goals(query: Query) -> List[_Goal]:
             )
         elif isinstance(g, BuiltinGoal):
             out.append(
-                _Builtin(
+                _BuiltinGoal(
                     op=g.builtin_name,
                     args=tuple(_term(a) for a in g.goal_args),
                 )
             )
+        else:
+            raise TypeError(f"Unsupported query goal type: {type(g)!r}")
     return out
 
 
-def _rule_head_terms(rule: Rule, prefix: str) -> Tuple[_Term, ...]:
+def _compile_rule_head(rule: Rule, prefix: str) -> Tuple[_Term, ...]:
     return tuple(_prefixed_term(a, prefix) for a in rule.head_args)
 
 
-def _rule_body_goals(rule: Rule, prefix: str) -> List[_Goal]:
+def _compile_rule_body(rule: Rule, prefix: str) -> List[_Goal]:
     out: List[_Goal] = []
     for g in rule.goals:
         if isinstance(g, RuleAtomGoal):
@@ -197,81 +222,93 @@ def _rule_body_goals(rule: Rule, prefix: str) -> List[_Goal]:
             )
         elif isinstance(g, RuleBuiltinGoal):
             out.append(
-                _Builtin(
+                _BuiltinGoal(
                     op=g.builtin_name,
                     args=tuple(_prefixed_term(a, prefix) for a in g.goal_args),
                 )
             )
+        else:
+            raise TypeError(f"Unsupported rule goal type: {type(g)!r}")
     return out
 
 
-# ── fact-index helper ─────────────────────────────────────────────────────────
+def _compile_constraint_body(constraint: Constraint, prefix: str) -> List[_Goal]:
+    out: List[_Goal] = []
+    for g in constraint.goals:
+        if isinstance(g, AtomGoal):
+            out.append(
+                _Atom(
+                    pred=g.pred_name,
+                    negated=g.negated,
+                    args=tuple(_prefixed_term(a, prefix) for a in g.goal_args),
+                )
+            )
+        elif isinstance(g, BuiltinGoal):
+            out.append(
+                _BuiltinGoal(
+                    op=g.builtin_name,
+                    args=tuple(_prefixed_term(a, prefix) for a in g.goal_args),
+                )
+            )
+        else:
+            raise TypeError(f"Unsupported constraint goal type: {type(g)!r}")
+    return out
 
 
-def _build_fact_index(
-    belief_records: List[BeliefRecord],
-) -> Dict[Tuple[str, int], List[BeliefRecord]]:
-    """Group belief records by (pred_name, arity) for O(1) lookup."""
-    idx: Dict[Tuple[str, int], List[BeliefRecord]] = {}
-    for rec in belief_records:
-        key = (rec.pred_name, rec.pred_arity)
-        idx.setdefault(key, []).append(rec)
-    return idx
+# ---------------------------------------------------------------------------
+# Time / visibility
+# ---------------------------------------------------------------------------
 
 
-# ── belief / temporal filtering ───────────────────────────────────────────────
+def _utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
-def _is_active(
+def _resolve_effective_times(query: Query) -> Tuple[datetime, datetime, datetime]:
+    opts = query.options
+    now = datetime.now(timezone.utc)
+
+    query_time = _utc(opts.query_time) if opts.query_time is not None else now
+    valid_at = _utc(opts.valid_at) if opts.valid_at is not None else query_time
+    known_at = _utc(opts.known_at) if opts.known_at is not None else query_time
+    return query_time, valid_at, known_at
+
+
+def _record_visible(
     record: BeliefRecord,
-    asof: Optional[datetime],
-    policy: str,
+    *,
+    valid_at: datetime,
+    known_at: datetime,
 ) -> bool:
-    """Return True when *record* passes policy and temporal filters.
+    if _utc(record.et) > known_at:
+        return False
 
-    Policy gate (aligned with legacy):
-      report    → no filter
-      credulous → b > d
-      skeptical → b > d
+    if record.vf is not None and _utc(record.vf) > valid_at:
+        return False
 
-    Temporal gate:
-      Uses the validity window [vf, vt].  A record is active at *asof* if:
-        (vf is None OR vf <= asof) AND (vt is None OR vt >= asof)
-    """
-    # Belief-score gate
-    if policy in ("credulous", "skeptical"):
-        if record.b <= record.d:
-            return False
-    # report: no filter
-
-    # Validity-time gate
-    if asof is not None:
-        cmp_asof = (
-            asof if asof.tzinfo is not None else asof.replace(tzinfo=timezone.utc)
-        )
-
-        if record.vf is not None:
-            vf = (
-                record.vf
-                if record.vf.tzinfo is not None
-                else record.vf.replace(tzinfo=timezone.utc)
-            )
-            if vf > cmp_asof:
-                return False
-
-        if record.vt is not None:
-            vt = (
-                record.vt
-                if record.vt.tzinfo is not None
-                else record.vt.replace(tzinfo=timezone.utc)
-            )
-            if vt < cmp_asof:
-                return False
+    if record.vt is not None and _utc(record.vt) < valid_at:
+        return False
 
     return True
 
 
-# ── substitution helpers ──────────────────────────────────────────────────────
+def _build_fact_index(
+    records: Sequence[BeliefRecord],
+    *,
+    valid_at: datetime,
+    known_at: datetime,
+) -> Dict[Tuple[str, int], List[BeliefRecord]]:
+    out: Dict[Tuple[str, int], List[BeliefRecord]] = {}
+    for rec in records:
+        if not _record_visible(rec, valid_at=valid_at, known_at=known_at):
+            continue
+        out.setdefault((rec.pred_name, rec.pred_arity), []).append(rec)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Basic substitution / matching
+# ---------------------------------------------------------------------------
 
 
 def _resolve(term: _Term, subst: Subst) -> Optional[Any]:
@@ -283,21 +320,34 @@ def _resolve(term: _Term, subst: Subst) -> Optional[Any]:
 def _unify(term: _Term, value: Any, subst: Subst) -> Optional[Subst]:
     if isinstance(term, _GroundTerm):
         return subst if term.value == value else None
-    name = term.name
-    if name in subst:
-        return subst if subst[name] == value else None
-    return {**subst, name: value}
+
+    if term.name in subst:
+        return subst if subst[term.name] == value else None
+
+    return {**subst, term.name: value}
 
 
-# ── rule-head matching ────────────────────────────────────────────────────────
+def _belief_arg_value(arg: BeliefArg) -> Any:
+    if isinstance(arg, BeliefEntityArg):
+        return arg.ent_name
+    if isinstance(arg, BeliefLiteralArg):
+        return arg.value
+    raise TypeError(f"Unsupported belief arg type: {type(arg)!r}")
 
 
-def _match_head(
+def _match_rule_head(
     head_terms: Tuple[_Term, ...],
     goal_args: Tuple[_Term, ...],
     query_subst: Subst,
 ) -> Optional[Tuple[Subst, Subst, List[Tuple[str, str]]]]:
-    new_q: Subst = dict(query_subst)
+    """
+    Match a compiled rule head against a compiled goal under the current query subst.
+
+    Returns:
+      (new_query_subst, initial_rule_subst, links)
+    where links maps (query_var_name, rule_var_name).
+    """
+    new_q = dict(query_subst)
     r_subst: Subst = {}
     links: List[Tuple[str, str]] = []
 
@@ -313,8 +363,7 @@ def _match_head(
                     if g_term.name in new_q and new_q[g_term.name] != h_term.value:
                         return None
                     new_q[g_term.name] = h_term.value
-
-        else:  # h_term is _VarTerm (prefixed rule var)
+        else:
             if g_val is not None:
                 if h_term.name in r_subst and r_subst[h_term.name] != g_val:
                     return None
@@ -326,25 +375,107 @@ def _match_head(
     return new_q, r_subst, links
 
 
-# ── arithmetic helpers ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Epistemic semantics helpers
+# ---------------------------------------------------------------------------
+
+
+def _combine_truth(lhs: float, rhs: float, query: Query) -> float:
+    semantics = query.options.epistemic_semantics.body_truth
+    if semantics == BodyTruthSemantics.product:
+        return lhs * rhs
+    if semantics == BodyTruthSemantics.minimum:
+        return min(lhs, rhs)
+    raise ValueError(f"Unsupported body truth semantics: {semantics!r}")
+
+
+def _combine_falsity(lhs: float, rhs: float, query: Query) -> float:
+    semantics = query.options.epistemic_semantics.body_falsity
+    if semantics == BodyFalsitySemantics.noisy_or:
+        return 1.0 - ((1.0 - lhs) * (1.0 - rhs))
+    if semantics == BodyFalsitySemantics.maximum:
+        return max(lhs, rhs)
+    raise ValueError(f"Unsupported body falsity semantics: {semantics!r}")
+
+
+def _rule_applicability(body_b: float, body_d: float, query: Query) -> float:
+    semantics = query.options.epistemic_semantics.rule_applicability
+    if semantics == RuleApplicabilitySemantics.body_truth_only:
+        return body_b
+    if semantics == RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity:
+        return body_b * (1.0 - body_d)
+    raise ValueError(f"Unsupported rule applicability semantics: {semantics!r}")
+
+
+def _constraint_applicability(body_b: float, body_d: float, query: Query) -> float:
+    semantics = query.options.epistemic_semantics.constraint_applicability
+    if semantics == ConstraintApplicabilitySemantics.body_truth_only:
+        return body_b
+    if (
+        semantics
+        == ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity
+    ):
+        return body_b * (1.0 - body_d)
+    raise ValueError(f"Unsupported constraint applicability semantics: {semantics!r}")
+
+
+def _aggregate_values(values: Sequence[float], query: Query) -> float:
+    semantics = query.options.epistemic_semantics.support_aggregation
+    vals = [float(v) for v in values if v > 0.0]
+    if not vals:
+        return 0.0
+
+    if semantics == SupportAggregationSemantics.noisy_or:
+        prod = 1.0
+        for v in vals:
+            prod *= 1.0 - v
+        return 1.0 - prod
+
+    if semantics == SupportAggregationSemantics.maximum:
+        return max(vals)
+
+    if semantics == SupportAggregationSemantics.capped_sum:
+        return min(1.0, sum(vals))
+
+    raise ValueError(f"Unsupported support aggregation semantics: {semantics!r}")
+
+
+def _derive_belnap_status(b: float, d: float, query: Query) -> BelnapStatus:
+    semantics = query.options.epistemic_semantics.belnap_status
+    if semantics != BelnapStatusSemantics.nonzero:
+        raise ValueError(f"Unsupported Belnap status semantics: {semantics!r}")
+
+    eps = 1e-12
+    has_b = b > eps
+    has_d = d > eps
+
+    if has_b and has_d:
+        return BelnapStatus.both
+    if has_b:
+        return BelnapStatus.true
+    if has_d:
+        return BelnapStatus.false
+    return BelnapStatus.neither
+
+
+# ---------------------------------------------------------------------------
+# Builtins
+# ---------------------------------------------------------------------------
 
 
 def _numeric(val: Any) -> Optional[float]:
-    """Extract a float from a Python value; returns None for non-numeric types."""
-    if isinstance(val, (int, float)):
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
         return float(val)
     return None
 
 
 def _to_number(v: float) -> Union[int, float]:
-    """Return int when the float value is whole, otherwise float."""
     if abs(v - round(v)) <= 1e-9:
         return int(round(v))
     return v
 
 
 def _arith_forward(op: Builtin, a: float, b: float) -> Optional[float]:
-    """Compute a op b = c."""
     if op == Builtin.add:
         return a + b
     if op == Builtin.sub:
@@ -357,7 +488,6 @@ def _arith_forward(op: Builtin, a: float, b: float) -> Optional[float]:
 
 
 def _arith_solve_a(op: Builtin, b: float, c: float) -> Optional[float]:
-    """Solve a op b = c for a."""
     if op == Builtin.add:
         return c - b
     if op == Builtin.sub:
@@ -370,7 +500,6 @@ def _arith_solve_a(op: Builtin, b: float, c: float) -> Optional[float]:
 
 
 def _arith_solve_b(op: Builtin, a: float, c: float) -> Optional[float]:
-    """Solve a op b = c for b."""
     if op == Builtin.add:
         return c - a
     if op == Builtin.sub:
@@ -382,477 +511,436 @@ def _arith_solve_b(op: Builtin, a: float, c: float) -> Optional[float]:
     return None
 
 
-# ── core solver ───────────────────────────────────────────────────────────────
+def _eval_builtin(goal: _BuiltinGoal, subst: Subst) -> Iterator[Subst]:
+    op = goal.op
 
+    if op == Builtin.eq:
+        a_term, b_term = goal.args
+        a_val = _resolve(a_term, subst)
+        b_val = _resolve(b_term, subst)
 
-def _solve(
-    goals: List[_Goal],
-    subst: Subst,
-    fact_index: Dict[Tuple[str, int], List[BeliefRecord]],
-    rules: List[Rule],
-    asof: Optional[datetime],
-    policy: str,
-    depth: int,
-    max_depth: int,
-    collector: Optional[ExplainCollector] = None,
-    for_negation_probe: bool = False,
-) -> Iterator[Subst]:
-    """Recursively solve *goals* under *subst*.
+        if a_val is not None and b_val is not None:
+            if a_val == b_val:
+                yield subst
+            return
 
-    Yields every substitution that satisfies the goal list.
-    """
-    if not goals:
-        yield subst
+        if a_val is None and isinstance(a_term, _VarTerm) and b_val is not None:
+            new_subst = _unify(a_term, b_val, subst)
+            if new_subst is not None:
+                yield new_subst
+            return
+
+        if b_val is None and isinstance(b_term, _VarTerm) and a_val is not None:
+            new_subst = _unify(b_term, a_val, subst)
+            if new_subst is not None:
+                yield new_subst
+            return
+
+        if (
+            isinstance(a_term, _VarTerm)
+            and isinstance(b_term, _VarTerm)
+            and a_term.name == b_term.name
+        ):
+            yield subst
         return
 
-    if depth > max_depth:
-        if collector and not for_negation_probe and goals:
-            goal = goals[0]
-            if isinstance(goal, _Atom):
+    if op in (Builtin.add, Builtin.sub, Builtin.mul, Builtin.div):
+        a_term, b_term, c_term = goal.args
+        a_val = _resolve(a_term, subst)
+        b_val = _resolve(b_term, subst)
+        c_val = _resolve(c_term, subst)
+
+        na = _numeric(a_val)
+        nb = _numeric(b_val)
+        nc = _numeric(c_val)
+
+        unbound = sum(1 for n in (na, nb, nc) if n is None)
+
+        if unbound == 0:
+            result = _arith_forward(op, na, nb)  # type: ignore[arg-type]
+            if result is not None and abs(result - nc) <= 1e-9:  # type: ignore[operator]
+                yield subst
+            return
+
+        if unbound == 1:
+            if nc is None and isinstance(c_term, _VarTerm):
+                result = _arith_forward(op, na, nb)  # type: ignore[arg-type]
+                if result is not None:
+                    new_subst = _unify(c_term, _to_number(result), subst)
+                    if new_subst is not None:
+                        yield new_subst
+                return
+
+            if na is None and isinstance(a_term, _VarTerm):
+                result = _arith_solve_a(op, nb, nc)  # type: ignore[arg-type]
+                if result is not None:
+                    new_subst = _unify(a_term, _to_number(result), subst)
+                    if new_subst is not None:
+                        yield new_subst
+                return
+
+            if nb is None and isinstance(b_term, _VarTerm):
+                result = _arith_solve_b(op, na, nc)  # type: ignore[arg-type]
+                if result is not None:
+                    new_subst = _unify(b_term, _to_number(result), subst)
+                    if new_subst is not None:
+                        yield new_subst
+                return
+
+        return
+
+    if op == Builtin.between:
+        x_val = _numeric(_resolve(goal.args[0], subst))
+        lo_val = _numeric(_resolve(goal.args[1], subst))
+        hi_val = _numeric(_resolve(goal.args[2], subst))
+        if (
+            x_val is not None
+            and lo_val is not None
+            and hi_val is not None
+            and lo_val <= x_val <= hi_val
+        ):
+            yield subst
+        return
+
+    if op in (Builtin.int, Builtin.string, Builtin.float, Builtin.entity):
+        val = _resolve(goal.args[0], subst)
+        if val is None:
+            return
+
+        if op == Builtin.int and isinstance(val, int) and not isinstance(val, bool):
+            yield subst
+            return
+        if op == Builtin.string and isinstance(val, str):
+            yield subst
+            return
+        if op == Builtin.float and isinstance(val, float):
+            yield subst
+            return
+        if op == Builtin.entity and isinstance(val, str):
+            yield subst
+            return
+        return
+
+    a_val = _resolve(goal.args[0], subst)
+    b_val = _resolve(goal.args[1], subst)
+    if a_val is None or b_val is None:
+        return
+
+    op_fn = _CMP_OPS[op]
+    try:
+        if op_fn(a_val, b_val):
+            yield subst
+    except TypeError:
+        return
+
+
+# ---------------------------------------------------------------------------
+# Evidence solving
+# ---------------------------------------------------------------------------
+
+
+def _aggregate_evidence_rows(
+    rows: Sequence[_EvidenceRow],
+    query: Query,
+) -> List[_EvidenceRow]:
+    grouped: Dict[Tuple[Tuple[str, Any], ...], List[_EvidenceRow]] = {}
+    for row in rows:
+        key = tuple(sorted(row.subst.items(), key=lambda kv: kv[0]))
+        grouped.setdefault(key, []).append(row)
+
+    out: List[_EvidenceRow] = []
+    for items, group in grouped.items():
+        subst = dict(items)
+        b = _aggregate_values([r.b for r in group], query)
+        d = _aggregate_values([r.d for r in group], query)
+        out.append(_EvidenceRow(subst=subst, b=b, d=d))
+    return out
+
+
+def _positive_atom_evidence(
+    goal: _Atom,
+    subst: Subst,
+    ctx: _Context,
+    collector: Optional[ExplainCollector],
+    depth: int,
+) -> List[_EvidenceRow]:
+    if depth > ctx.max_depth:
+        return []
+
+    rows: List[_EvidenceRow] = []
+
+    # facts
+    for record in ctx.fact_index.get((goal.pred, len(goal.args)), ()):
+        new_subst: Optional[Subst] = subst
+        for g_term, f_arg in zip(goal.args, record.args):
+            new_subst = _unify(g_term, _belief_arg_value(f_arg), new_subst)  # type: ignore[arg-type]
+            if new_subst is None:
+                break
+
+        if new_subst is not None:
+            if collector is not None:
                 collector.record(
-                    "rule_depth_limit",
+                    "fact_support",
                     {
-                        "goal": {
-                            "pred": goal.pred,
-                            "args": [_term_repr(a) for a in goal.args],
-                        },
-                        "depth": depth,
-                        "max_depth": max_depth,
+                        "pred": goal.pred,
+                        "b": record.b,
+                        "d": record.d,
                     },
                 )
+            rows.append(_EvidenceRow(subst=new_subst, b=record.b, d=record.d))
+
+    # rules
+    prefix = f"_r{depth}_"
+    for rule in ctx.rules:
+        if rule.head_pred_name != goal.pred or rule.head_pred_arity != len(goal.args):
+            continue
+
+        head_terms = _compile_rule_head(rule, prefix)
+        match = _match_rule_head(head_terms, goal.args, subst)
+        if match is None:
+            continue
+
+        new_query_subst, initial_rule_subst, links = match
+        body_goals = _compile_rule_body(rule, prefix)
+
+        for body_row in _solve_body_truth(
+            body_goals,
+            initial_rule_subst,
+            ctx,
+            collector,
+            depth + 1,
+            current_support=1.0,
+            current_falsity=0.0,
+        ):
+            result_subst = dict(new_query_subst)
+            conflict = False
+            for q_var, r_var in links:
+                if r_var in body_row.subst:
+                    value = body_row.subst[r_var]
+                    if q_var in result_subst and result_subst[q_var] != value:
+                        conflict = True
+                        break
+                    result_subst[q_var] = value
+            if conflict:
+                continue
+
+            applicability = _rule_applicability(
+                body_row.support,
+                body_row.falsity,
+                ctx.query,
+            )
+            if applicability <= 0.0:
+                continue
+
+            if collector is not None:
+                collector.record(
+                    "rule_applicability",
+                    {
+                        "pred": goal.pred,
+                        "rule_head": rule.head_pred_name,
+                        "body_support": body_row.support,
+                        "body_falsity": body_row.falsity,
+                        "applicability": applicability,
+                    },
+                )
+
+            propagation = ctx.query.options.epistemic_semantics.rule_propagation
+            if propagation != RulePropagationSemantics.body_times_rule_weights:
+                raise ValueError(
+                    f"Unsupported rule propagation semantics: {propagation!r}"
+                )
+
+            b = applicability * rule.b
+            d = applicability * rule.d
+
+            if collector is not None:
+                collector.record(
+                    "rule_support",
+                    {
+                        "pred": goal.pred,
+                        "rule_head": rule.head_pred_name,
+                        "body_support": body_row.support,
+                        "body_falsity": body_row.falsity,
+                        "applicability": applicability,
+                        "b": b,
+                        "d": d,
+                    },
+                )
+
+            rows.append(_EvidenceRow(subst=result_subst, b=b, d=d))
+
+    return _aggregate_evidence_rows(rows, ctx.query)
+
+
+def _positive_atom_truth_rows(
+    goal: _Atom,
+    subst: Subst,
+    ctx: _Context,
+    collector: Optional[ExplainCollector],
+    depth: int,
+) -> List[_TruthRow]:
+    evidence_rows = _positive_atom_evidence(goal, subst, ctx, collector, depth)
+    out: List[_TruthRow] = []
+    for row in evidence_rows:
+        if row.b > 0.0 or row.d > 0.0:
+            out.append(_TruthRow(subst=row.subst, support=row.b, falsity=row.d))
+    return out
+
+
+def _solve_body_truth(
+    goals: Sequence[_Goal],
+    subst: Subst,
+    ctx: _Context,
+    collector: Optional[ExplainCollector],
+    depth: int,
+    current_support: float,
+    current_falsity: float,
+) -> Iterator[_TruthRow]:
+    if depth > ctx.max_depth:
         return
 
-    goal, *rest = goals
-    rest_goals: List[_Goal] = rest  # type: ignore[assignment]
-
-    # ── builtin goal ──────────────────────────────────────────────────────────
-    if isinstance(goal, _Builtin):
-        # eq: can bind an unbound variable to the other side's value
-        if goal.op == Builtin.eq:
-            a_term, b_term = goal.args[0], goal.args[1]
-            a_val = _resolve(a_term, subst)
-            b_val = _resolve(b_term, subst)
-
-            if a_val is not None and b_val is not None:
-                # Both ground – filter
-                if a_val == b_val:
-                    yield from _solve(
-                        rest_goals,
-                        subst,
-                        fact_index,
-                        rules,
-                        asof,
-                        policy,
-                        depth,
-                        max_depth,
-                        collector,
-                        for_negation_probe,
-                    )
-            elif a_val is None and isinstance(a_term, _VarTerm) and b_val is not None:
-                # Bind left variable
-                new_subst = _unify(a_term, b_val, subst)
-                if new_subst is not None:
-                    yield from _solve(
-                        rest_goals,
-                        new_subst,
-                        fact_index,
-                        rules,
-                        asof,
-                        policy,
-                        depth,
-                        max_depth,
-                        collector,
-                        for_negation_probe,
-                    )
-            elif b_val is None and isinstance(b_term, _VarTerm) and a_val is not None:
-                # Bind right variable
-                new_subst = _unify(b_term, a_val, subst)
-                if new_subst is not None:
-                    yield from _solve(
-                        rest_goals,
-                        new_subst,
-                        fact_index,
-                        rules,
-                        asof,
-                        policy,
-                        depth,
-                        max_depth,
-                        collector,
-                        for_negation_probe,
-                    )
-            elif (
-                isinstance(a_term, _VarTerm)
-                and isinstance(b_term, _VarTerm)
-                and a_term.name == b_term.name
-            ):
-                # Same variable – trivially equal
-                yield from _solve(
-                    rest_goals,
-                    subst,
-                    fact_index,
-                    rules,
-                    asof,
-                    policy,
-                    depth,
-                    max_depth,
-                    collector,
-                    for_negation_probe,
-                )
-            # else: two distinct unbound variables – no solution
-            return
-
-        # add / sub / mul / div: 3-arg arithmetic, solves for one unknown
-        if goal.op in (Builtin.add, Builtin.sub, Builtin.mul, Builtin.div):
-            a_term, b_term, c_term = goal.args[0], goal.args[1], goal.args[2]
-            a_val = _resolve(a_term, subst)
-            b_val = _resolve(b_term, subst)
-            c_val = _resolve(c_term, subst)
-            na = _numeric(a_val)
-            nb = _numeric(b_val)
-            nc = _numeric(c_val)
-
-            unbound = sum(1 for n in (na, nb, nc) if n is None)
-            if unbound == 0:
-                # All ground – check
-                result = _arith_forward(goal.op, na, nb)  # type: ignore[arg-type]
-                if result is not None and abs(result - nc) <= 1e-9:  # type: ignore[operator]
-                    yield from _solve(
-                        rest_goals,
-                        subst,
-                        fact_index,
-                        rules,
-                        asof,
-                        policy,
-                        depth,
-                        max_depth,
-                        collector,
-                        for_negation_probe,
-                    )
-            elif unbound == 1:
-                if nc is None and isinstance(c_term, _VarTerm):
-                    r = _arith_forward(goal.op, na, nb)  # type: ignore[arg-type]
-                    if r is not None:
-                        new_s = _unify(c_term, _to_number(r), subst)
-                        if new_s is not None:
-                            yield from _solve(
-                                rest_goals,
-                                new_s,
-                                fact_index,
-                                rules,
-                                asof,
-                                policy,
-                                depth,
-                                max_depth,
-                                collector,
-                                for_negation_probe,
-                            )
-                elif na is None and isinstance(a_term, _VarTerm):
-                    r = _arith_solve_a(goal.op, nb, nc)  # type: ignore[arg-type]
-                    if r is not None:
-                        new_s = _unify(a_term, _to_number(r), subst)
-                        if new_s is not None:
-                            yield from _solve(
-                                rest_goals,
-                                new_s,
-                                fact_index,
-                                rules,
-                                asof,
-                                policy,
-                                depth,
-                                max_depth,
-                                collector,
-                                for_negation_probe,
-                            )
-                elif nb is None and isinstance(b_term, _VarTerm):
-                    r = _arith_solve_b(goal.op, na, nc)  # type: ignore[arg-type]
-                    if r is not None:
-                        new_s = _unify(b_term, _to_number(r), subst)
-                        if new_s is not None:
-                            yield from _solve(
-                                rest_goals,
-                                new_s,
-                                fact_index,
-                                rules,
-                                asof,
-                                policy,
-                                depth,
-                                max_depth,
-                                collector,
-                                for_negation_probe,
-                            )
-            # else: 2+ unknowns – no solution
-            return
-
-        # between(X, Lo, Hi): Lo <= X <= Hi, all three must be numeric
-        if goal.op == Builtin.between:
-            x_val = _resolve(goal.args[0], subst)
-            lo_val = _resolve(goal.args[1], subst)
-            hi_val = _resolve(goal.args[2], subst)
-            nx = _numeric(x_val)
-            nlo = _numeric(lo_val)
-            nhi = _numeric(hi_val)
-            if (
-                nx is not None
-                and nlo is not None
-                and nhi is not None
-                and nlo <= nx <= nhi
-            ):
-                yield from _solve(
-                    rest_goals,
-                    subst,
-                    fact_index,
-                    rules,
-                    asof,
-                    policy,
-                    depth,
-                    max_depth,
-                    collector,
-                    for_negation_probe,
-                )
-            return
-
-        # Type predicates: int/1, string/1, float/1, entity/1
-        if goal.op in (Builtin.int, Builtin.string, Builtin.float, Builtin.entity):
-            val = _resolve(goal.args[0], subst)
-            if val is None:
-                return  # Type predicates require ground argument
-
-            type_matches = False
-            if goal.op == Builtin.int:
-                type_matches = isinstance(val, int) and not isinstance(val, bool)
-            elif goal.op == Builtin.string:
-                type_matches = isinstance(val, str)
-            elif goal.op == Builtin.float:
-                type_matches = isinstance(val, float)
-            elif goal.op == Builtin.entity:
-                # entity/1 matches any string value (entity names are strings)
-                type_matches = isinstance(val, str)
-
-            if type_matches:
-                yield from _solve(
-                    rest_goals,
-                    subst,
-                    fact_index,
-                    rules,
-                    asof,
-                    policy,
-                    depth,
-                    max_depth,
-                    collector,
-                    for_negation_probe,
-                )
-            return
-
-        # ne / lt / leq / gt / geq: filter only (both args must be ground)
-        a_val = _resolve(goal.args[0], subst)
-        b_val = _resolve(goal.args[1], subst)
-        if a_val is None or b_val is None:
-            return
-        op_fn = _CMP_OPS[goal.op]
-        try:
-            if op_fn(a_val, b_val):
-                yield from _solve(
-                    rest_goals,
-                    subst,
-                    fact_index,
-                    rules,
-                    asof,
-                    policy,
-                    depth,
-                    max_depth,
-                    collector,
-                    for_negation_probe,
-                )
-        except TypeError:
-            pass
+    if not goals:
+        yield _TruthRow(
+            subst=subst,
+            support=current_support,
+            falsity=current_falsity,
+        )
         return
 
-    # ── negation as failure ───────────────────────────────────────────────────
+    goal = goals[0]
+    rest = goals[1:]
+
+    if isinstance(goal, _BuiltinGoal):
+        for new_subst in _eval_builtin(goal, subst):
+            yield from _solve_body_truth(
+                rest,
+                new_subst,
+                ctx,
+                collector,
+                depth,
+                current_support,
+                current_falsity,
+            )
+        return
+
     assert isinstance(goal, _Atom)
 
     if goal.negated:
         positive = _Atom(pred=goal.pred, negated=False, args=goal.args)
         has_any = any(
-            True
-            for _ in _solve(
-                [positive],
+            row.support > 0.0
+            for row in _positive_atom_truth_rows(
+                positive,
                 subst,
-                fact_index,
-                rules,
-                asof,
-                policy,
-                depth + 1,
-                max_depth,
+                ctx,
                 collector,
-                for_negation_probe=True,
+                depth + 1,
             )
         )
+
+        non_atom = ctx.query.options.epistemic_semantics.non_atom
+        if non_atom != NonAtomSemantics.crisp_filters:
+            raise ValueError(f"Unsupported non-atom semantics: {non_atom!r}")
+
         if not has_any:
-            if collector and not for_negation_probe:
-                collector.record(
-                    "negation_success",
-                    {
-                        "goal": {
-                            "pred": goal.pred,
-                            "args": [_term_repr(a) for a in goal.args],
-                            "negated": True,
-                        },
-                        "binding": {k: v for k, v in subst.items()},
-                    },
-                )
-            yield from _solve(
-                rest_goals,
+            yield from _solve_body_truth(
+                rest,
                 subst,
-                fact_index,
-                rules,
-                asof,
-                policy,
-                depth,
-                max_depth,
+                ctx,
                 collector,
-                for_negation_probe,
+                depth,
+                current_support,
+                current_falsity,
             )
         return
 
-    # ── positive atom – try facts ─────────────────────────────────────────────
-    for record in fact_index.get((goal.pred, len(goal.args)), ()):
-        if not _is_active(record, asof, policy):
-            continue
-
-        new_subst: Optional[Subst] = subst
-        for g_term, f_arg in zip(goal.args, record.args):
-            f_val: Any
-            if isinstance(f_arg, BeliefEntityArg):
-                f_val = f_arg.ent_name
-            else:  # BeliefLiteralArg
-                f_val = f_arg.value  # type: ignore[union-attr]
-
-            new_subst = _unify(g_term, f_val, new_subst)  # type: ignore[arg-type]
-            if new_subst is None:
-                break
-
-        if new_subst is not None:
-            if collector and not for_negation_probe:
-                collector.record(
-                    "atom_match",
-                    {
-                        "goal": {
-                            "pred": goal.pred,
-                            "args": [_term_repr(a) for a in goal.args],
-                            "negated": False,
-                        },
-                        "fact": [_belief_arg_repr(a) for a in record.args],
-                    },
-                )
-            yield from _solve(
-                rest_goals,
-                new_subst,
-                fact_index,
-                rules,
-                asof,
-                policy,
-                depth,
-                max_depth,
-                collector,
-                for_negation_probe,
-            )
-
-    # ── positive atom – try rules ─────────────────────────────────────────────
-    prefix = f"_r{depth}_"
-    for rule in rules:
-        if rule.head_pred_name != goal.pred or rule.head_pred_arity != len(goal.args):
-            continue
-
-        head_terms = _rule_head_terms(rule, prefix)
-        match = _match_head(head_terms, goal.args, subst)
-        if match is None:
-            continue
-
-        new_q_subst, initial_r_subst, links = match
-        body_goals = _rule_body_goals(rule, prefix)
-
-        for body_subst in _solve(
-            body_goals,
-            initial_r_subst,
-            fact_index,
-            rules,
-            asof,
-            policy,
-            depth + 1,
-            max_depth,
+    for atom_row in _positive_atom_truth_rows(goal, subst, ctx, collector, depth + 1):
+        combined_support = _combine_truth(
+            current_support,
+            atom_row.support,
+            ctx.query,
+        )
+        combined_falsity = _combine_falsity(
+            current_falsity,
+            atom_row.falsity,
+            ctx.query,
+        )
+        yield from _solve_body_truth(
+            rest,
+            atom_row.subst,
+            ctx,
             collector,
-            for_negation_probe,
+            depth,
+            combined_support,
+            combined_falsity,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Constraint path (reusable hook; not yet surfaced in QueryResult)
+# ---------------------------------------------------------------------------
+
+
+def _constraint_violation_rows(
+    ctx: _Context,
+    collector: Optional[ExplainCollector],
+) -> Dict[str, List[_EvidenceRow]]:
+    """
+    Reusable constraint evaluation path.
+
+    This is intentionally not wired into QueryResult yet, because the result
+    contract currently has no dedicated violation surface.
+    """
+    out: Dict[str, List[_EvidenceRow]] = {}
+
+    for idx, constraint in enumerate(ctx.constraints):
+        prefix = f"_c{idx}_"
+        body_goals = _compile_constraint_body(constraint, prefix)
+
+        local_rows: List[_EvidenceRow] = []
+        for body_row in _solve_body_truth(
+            body_goals,
+            {},
+            ctx,
+            collector,
+            depth=1,
+            current_support=1.0,
+            current_falsity=0.0,
         ):
-            result_subst: Subst = dict(new_q_subst)
-            conflict = False
-            for q_var, r_var in links:
-                if r_var in body_subst:
-                    val = body_subst[r_var]
-                    if q_var in result_subst and result_subst[q_var] != val:
-                        conflict = True
-                        break
-                    result_subst[q_var] = val
-            if conflict:
+            applicability = _constraint_applicability(
+                body_row.support,
+                body_row.falsity,
+                ctx.query,
+            )
+            if applicability <= 0.0:
                 continue
 
-            if collector and not for_negation_probe:
-                collector.record(
-                    "rule_match",
-                    {
-                        "goal": {
-                            "pred": goal.pred,
-                            "args": [_term_repr(a) for a in goal.args],
-                            "negated": False,
-                        },
-                        "rule": rule.head_pred_name,
-                    },
+            propagation = ctx.query.options.epistemic_semantics.constraint_propagation
+            if (
+                propagation
+                != ConstraintPropagationSemantics.body_times_constraint_weights_to_violation
+            ):
+                raise ValueError(
+                    f"Unsupported constraint propagation semantics: {propagation!r}"
                 )
-            yield from _solve(
-                rest_goals,
-                result_subst,
-                fact_index,
-                rules,
-                asof,
-                policy,
-                depth,
-                max_depth,
-                collector,
-                for_negation_probe,
+
+            local_rows.append(
+                _EvidenceRow(
+                    subst=body_row.subst,
+                    b=applicability * constraint.b,
+                    d=applicability * constraint.d,
+                )
             )
 
+        name = constraint.name or f"constraint_{idx}"
+        out[name] = _aggregate_evidence_rows(local_rows, ctx.query)
 
-# ── post-processing helpers ───────────────────────────────────────────────────
-
-
-def _apply_distinct(bindings: List[Binding]) -> List[Binding]:
-    seen: Set[Tuple[Tuple[str, Any], ...]] = set()
-    out: List[Binding] = []
-    for b in bindings:
-        key = tuple(sorted(b.values.items(), key=lambda kv: kv[0]))
-        if key not in seen:
-            seen.add(key)
-            out.append(b)
     return out
 
 
-def _apply_order_by(bindings: List[Binding], order_by: List[str]) -> List[Binding]:
-    if not order_by:
-        return bindings
-
-    def _sort_key(b: Binding) -> Tuple[Any, ...]:
-        parts = []
-        for k in order_by:
-            v = b.values.get(k)
-            if v is None:
-                parts.append((1, "", ""))
-            else:
-                parts.append((0, type(v).__name__, v))
-        return tuple(parts)
-
-    return sorted(bindings, key=_sort_key)
-
-
-# ── public engine ─────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Answer shaping
+# ---------------------------------------------------------------------------
 
 
 def _query_var_names(query: Query) -> Set[str]:
@@ -865,48 +953,197 @@ def _query_var_names(query: Query) -> Set[str]:
     return names - query.anon_vars
 
 
+def _project_bindings(
+    subst: Mapping[str, Any], vars_to_keep: Set[str]
+) -> Dict[str, Any]:
+    return {k: v for k, v in subst.items() if k in vars_to_keep}
+
+
+def _aggregate_answers_from_evidence(
+    rows: Sequence[_EvidenceRow],
+    query: Query,
+    query_vars: Set[str],
+) -> List[QueryAnswer]:
+    grouped: Dict[Tuple[Tuple[str, Any], ...], List[_EvidenceRow]] = {}
+
+    for row in rows:
+        bindings = _project_bindings(row.subst, query_vars)
+        key = tuple(sorted(bindings.items(), key=lambda kv: kv[0]))
+        grouped.setdefault(key, []).append(row)
+
+    answers: List[QueryAnswer] = []
+    for items, group in grouped.items():
+        bindings = dict(items)
+        b = _aggregate_values([r.b for r in group], query)
+        d = _aggregate_values([r.d for r in group], query)
+        answers.append(
+            QueryAnswer(
+                bindings=bindings,
+                b=b,
+                d=d,
+                belnap_status=_derive_belnap_status(b, d, query),
+            )
+        )
+
+    return answers
+
+
+def _aggregate_answers_from_truth(
+    rows: Sequence[_TruthRow],
+    query: Query,
+    query_vars: Set[str],
+) -> List[QueryAnswer]:
+    grouped: Dict[Tuple[Tuple[str, Any], ...], List[_TruthRow]] = {}
+
+    for row in rows:
+        bindings = _project_bindings(row.subst, query_vars)
+        key = tuple(sorted(bindings.items(), key=lambda kv: kv[0]))
+        grouped.setdefault(key, []).append(row)
+
+    answers: List[QueryAnswer] = []
+    for items, group in grouped.items():
+        bindings = dict(items)
+        b = _aggregate_values([r.support for r in group], query)
+        d = _aggregate_values([r.falsity for r in group], query)
+
+        answers.append(
+            QueryAnswer(
+                bindings=bindings,
+                b=b,
+                d=d,
+                belnap_status=_derive_belnap_status(b, d, query),
+            )
+        )
+
+    return answers
+
+
+def _sort_answers(answers: List[QueryAnswer], order_by: List[str]) -> List[QueryAnswer]:
+    if not order_by:
+        return answers
+
+    def _sort_key(answer: QueryAnswer) -> Tuple[Any, ...]:
+        parts = []
+        for key in order_by:
+            value = answer.bindings.get(key)
+            if value is None:
+                parts.append((1, "", ""))
+            else:
+                parts.append((0, type(value).__name__, value))
+        return tuple(parts)
+
+    return sorted(answers, key=_sort_key)
+
+
+def _apply_focus(answers: List[QueryAnswer], focus: QueryFocus) -> List[QueryAnswer]:
+    """Filter and rank answers according to the requested QueryFocus.
+
+    all:           keep all answers unchanged
+    support:       keep answers with b > 0, rank by b descending
+    disbelief:     keep answers with d > 0, rank by d descending
+    contradiction: keep answers with both b > 0 and d > 0, rank by min(b, d) descending
+    ignorance:     keep answers with both b and d near 0
+    """
+    if focus == QueryFocus.all:
+        return answers
+
+    eps = 1e-12
+
+    if focus == QueryFocus.support:
+        filtered = [a for a in answers if a.b > eps]
+        return sorted(filtered, key=lambda a: a.b, reverse=True)
+
+    if focus == QueryFocus.disbelief:
+        filtered = [a for a in answers if a.d > eps]
+        return sorted(filtered, key=lambda a: a.d, reverse=True)
+
+    if focus == QueryFocus.contradiction:
+        filtered = [a for a in answers if a.b > eps and a.d > eps]
+        return sorted(filtered, key=lambda a: min(a.b, a.d), reverse=True)
+
+    if focus == QueryFocus.ignorance:
+        return [a for a in answers if a.b <= eps and a.d <= eps]
+
+    return answers
+
+
+# ---------------------------------------------------------------------------
+# Engine
+# ---------------------------------------------------------------------------
+
+
 class InMemoryQueryEngine(QueryEngine):
-    """Pure-Python top-down Datalog evaluation over an in-memory Branch.
+    """
+    First-pass in-memory epistemic query engine.
 
-    Query options (set via ``QueryOptions`` on the Query object):
-
-    policy : "report" (default) | "credulous" | "skeptical"
-        report    → no belief-score filter
-        credulous → b > d
-        skeptical → b > d
-    asof : ISO-8601 string or datetime
-        Restrict to facts whose validity window [vf, vt] contains asof.
-    limit : int
-        Return at most this many bindings (after ordering).
-    offset : int
-        Skip this many bindings before applying limit.
-    order_by : str or list[str]
-        Sort results by these variable names.
-    distinct : bool
-        Deduplicate identical binding rows.
-    max_depth : int
-        Hard cap on recursive rule-application depth (default 24).
+    What changed from the old engine:
+    - no legacy policy/asof handling
+    - time semantics come from query_time / valid_at / known_at
+    - results are QueryAnswer rows
+    - positive atoms, rules, and body evaluation are separated
+    - constraints now have a reusable evaluation hook
+    - general query bodies compute both body-level b and d
+    - rule/constraint applicability can discount body truth by body falsity
     """
 
-    def evaluate(self, branch: Branch, query: Query) -> QueryResult:
-        opts = query.options
-        policy: str = opts.policy
-        asof: Optional[datetime] = opts.asof
+    @property
+    def info(self) -> EngineInfo:
+        return EngineInfo(
+            name="in_memory",
+            version="0.1",
+            supported_epistemic_semantics=EpistemicSemanticsCapabilities(
+                body_truth=(
+                    BodyTruthSemantics.product,
+                    BodyTruthSemantics.minimum,
+                ),
+                body_falsity=(
+                    BodyFalsitySemantics.noisy_or,
+                    BodyFalsitySemantics.maximum,
+                ),
+                rule_propagation=(RulePropagationSemantics.body_times_rule_weights,),
+                constraint_propagation=(
+                    ConstraintPropagationSemantics.body_times_constraint_weights_to_violation,
+                ),
+                support_aggregation=(
+                    SupportAggregationSemantics.noisy_or,
+                    SupportAggregationSemantics.maximum,
+                    SupportAggregationSemantics.capped_sum,
+                ),
+                belnap_status=(BelnapStatusSemantics.nonzero,),
+                non_atom=(NonAtomSemantics.crisp_filters,),
+                rule_applicability=(
+                    RuleApplicabilitySemantics.body_truth_only,
+                    RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity,
+                ),
+                constraint_applicability=(
+                    ConstraintApplicabilitySemantics.body_truth_only,
+                    ConstraintApplicabilitySemantics.body_truth_discounted_by_body_falsity,
+                ),
+            ),
+        )
 
-        # Build index and internal goals once per query
-        fact_index = _build_fact_index(branch.belief_records)
-        internal_goals = _query_goals(query)
+    def _evaluate(self, branch: Branch, query: Query) -> QueryResult:
+        effective_query_time, effective_valid_at, effective_known_at = (
+            _resolve_effective_times(query)
+        )
+        fact_index = _build_fact_index(
+            branch.belief_records,
+            valid_at=effective_valid_at,
+            known_at=effective_known_at,
+        )
+
+        compiled_goals = _compile_query_goals(query)
         query_vars = _query_var_names(query)
 
         # ── Skolemize bridging variables ──────────────────────────────────────
         # A variable is skolemized when it appears in:
-        #   1. A non-negated EDB assumption-candidate goal (EDB pred, ≥1 ground arg)
+        #   1. A non-negated EDB assumption-candidate goal (EDB pred, >=1 ground arg)
         #   2. At least one IDB goal (predicate has rules)
         # This allows hypothetical facts to be connected through rule derivations.
         idb_preds: Set[str] = {r.head_pred_name for r in branch.rules}
 
         vars_in_edb_assumptions: Set[str] = set()
-        for goal in internal_goals:
+        for goal in compiled_goals:
             if (
                 isinstance(goal, _Atom)
                 and not goal.negated
@@ -924,7 +1161,7 @@ class InMemoryQueryEngine(QueryEngine):
                                 vars_in_edb_assumptions.add(a.name)
 
         vars_in_idb_goals: Set[str] = set()
-        for goal in internal_goals:
+        for goal in compiled_goals:
             if isinstance(goal, _Atom) and goal.pred in idb_preds:
                 for a in goal.args:
                     if isinstance(a, _VarTerm):
@@ -936,7 +1173,7 @@ class InMemoryQueryEngine(QueryEngine):
 
         if skolem_map:
             new_goals: List[_Goal] = []
-            for goal in internal_goals:
+            for goal in compiled_goals:
                 if isinstance(goal, _Atom):
                     new_args = tuple(
                         _GroundTerm(skolem_map[a.name])
@@ -947,23 +1184,22 @@ class InMemoryQueryEngine(QueryEngine):
                     new_goals.append(
                         _Atom(pred=goal.pred, negated=goal.negated, args=new_args)
                     )
-                elif isinstance(goal, _Builtin):
+                elif isinstance(goal, _BuiltinGoal):
                     new_args = tuple(
                         _GroundTerm(skolem_map[a.name])
                         if isinstance(a, _VarTerm) and a.name in skolem_map
                         else a
                         for a in goal.args
                     )
-                    new_goals.append(_Builtin(op=goal.op, args=new_args))
+                    new_goals.append(_BuiltinGoal(op=goal.op, args=new_args))
                 else:
                     new_goals.append(goal)
-            internal_goals = new_goals
+            compiled_goals = new_goals
 
-        # ── Inline assumptions: fully-ground positive EDB atom goals become temp facts ─
-        # Only EDB predicates (no rules) are eligible.  IDB predicates must be
-        # proved through rule evaluation, not injected as self-fulfilling facts.
-        inline_assumptions: List[BeliefRecord] = []
-        for goal in internal_goals:
+        # ── Inline assumptions ────────────────────────────────────────────────
+        # Fully-ground positive EDB atom goals become temporary facts with
+        # b=1.0, d=0.0.  Only EDB predicates (no rules) are eligible.
+        for goal in compiled_goals:
             if (
                 isinstance(goal, _Atom)
                 and not goal.negated
@@ -980,8 +1216,8 @@ class InMemoryQueryEngine(QueryEngine):
                             belief_args.append(
                                 BeliefLiteralArg(
                                     kind=BaseKind.belief_arg,
-                                    term_kind="lit",
-                                    lit_type="int",
+                                    term_kind=TermKind.lit,
+                                    lit_type=LiteralType.int,
                                     value=val,
                                 )
                             )
@@ -989,13 +1225,12 @@ class InMemoryQueryEngine(QueryEngine):
                             belief_args.append(
                                 BeliefLiteralArg(
                                     kind=BaseKind.belief_arg,
-                                    term_kind="lit",
-                                    lit_type="float",
+                                    term_kind=TermKind.lit,
+                                    lit_type=LiteralType.float,
                                     value=val,
                                 )
                             )
                         else:
-                            # str values: treat as entity references
                             belief_args.append(
                                 BeliefEntityArg(
                                     kind=BaseKind.belief_arg,
@@ -1004,57 +1239,108 @@ class InMemoryQueryEngine(QueryEngine):
                                 )
                             )
 
-                    inline_assumptions.append(
-                        BeliefRecord(
-                            kind=BaseKind.belief_record,
-                            created_at=datetime.now(timezone.utc),
-                            pred_name=goal.pred,
-                            pred_arity=len(goal.args),
-                            args=belief_args,
-                            b=1.0,
-                            d=0.0,
-                        )
+                    rec = BeliefRecord(
+                        kind=BaseKind.belief_record,
+                        created_at=datetime.now(timezone.utc),
+                        pred_name=goal.pred,
+                        pred_arity=len(goal.args),
+                        args=belief_args,
+                        b=1.0,
+                        d=0.0,
                     )
-
-        if inline_assumptions:
-            fact_index = _build_fact_index(branch.belief_records + inline_assumptions)
+                    key = (rec.pred_name, rec.pred_arity)
+                    fact_index.setdefault(key, []).append(rec)
 
         # Seed substitution with Skolem bindings so they appear in results
         initial_subst: Subst = {var: skolem for var, skolem in skolem_map.items()}
 
-        # ── Solve ─────────────────────────────────────────────────────────────
-        collector = ExplainCollector(enabled=(opts.explain != "false"))
-        all_bindings: List[Binding] = []
-        for subst in _solve(
-            internal_goals,
-            initial_subst,
-            fact_index,
-            branch.rules,
-            asof,
-            policy,
-            depth=0,
-            max_depth=opts.max_depth,
-            collector=collector,
+        ctx = _Context(
+            fact_index=fact_index,
+            rules=tuple(branch.rules),
+            constraints=tuple(branch.constraints),
+            query=query,
+            effective_query_time=effective_query_time,
+            effective_valid_at=effective_valid_at,
+            effective_known_at=effective_known_at,
+            max_depth=query.options.max_depth,
+            explain_enabled=(query.options.explain != "false"),
+        )
+
+        collector = ExplainCollector(enabled=ctx.explain_enabled)
+
+        answers: List[QueryAnswer]
+
+        # Special-case: single positive atom query gets full atom-level (b,d).
+        if (
+            len(compiled_goals) == 1
+            and isinstance(compiled_goals[0], _Atom)
+            and not compiled_goals[0].negated
         ):
-            binding = Binding(
-                values={k: v for k, v in subst.items() if k in query_vars}
+            atom = compiled_goals[0]
+            evidence_rows = _positive_atom_evidence(
+                atom,
+                initial_subst,
+                ctx,
+                collector,
+                depth=0,
             )
-            all_bindings.append(binding)
+            answers = _aggregate_answers_from_evidence(evidence_rows, query, query_vars)
 
-        # ── Post-processing ────────────────────────────────────────────────────
-        bindings = all_bindings
+            # Closed single-atom query: return a single neither-answer if unsupported.
+            if not query_vars and not answers:
+                answers = [
+                    QueryAnswer(
+                        bindings={},
+                        b=0.0,
+                        d=0.0,
+                        belnap_status=BelnapStatus.neither,
+                    )
+                ]
+        else:
+            truth_rows = list(
+                _solve_body_truth(
+                    compiled_goals,
+                    initial_subst,
+                    ctx,
+                    collector,
+                    depth=0,
+                    current_support=1.0,
+                    current_falsity=0.0,
+                )
+            )
+            answers = _aggregate_answers_from_truth(truth_rows, query, query_vars)
 
-        if opts.distinct:
-            bindings = _apply_distinct(bindings)
+            # Closed general query: return a single neither-answer if unsupported.
+            if not query_vars and not answers:
+                answers = [
+                    QueryAnswer(
+                        bindings={},
+                        b=0.0,
+                        d=0.0,
+                        belnap_status=BelnapStatus.neither,
+                    )
+                ]
 
-        if opts.order_by:
-            bindings = _apply_order_by(bindings, opts.order_by)
+        # ── Post-processing ──────────────────────────────────────────────────
+        # Note: distinct is not needed -- answer aggregation merges identical
+        # projected bindings, which subsumes row-level deduplication.
 
-        if opts.offset:
-            bindings = bindings[opts.offset :]
+        answers = _apply_focus(answers, query.options.focus)
+        answers = _sort_answers(answers, query.options.order_by)
 
-        if opts.limit is not None:
-            bindings = bindings[: opts.limit]
+        if query.options.offset:
+            answers = answers[query.options.offset :]
 
-        explain = collector.events if opts.explain != "false" else None
-        return QueryResult(bindings=bindings, explain=explain)
+        if query.options.limit is not None:
+            answers = answers[: query.options.limit]
+
+        explain = tuple(collector.events) if ctx.explain_enabled else None
+
+        return QueryResult(
+            answers=tuple(answers),
+            effective_query_time=effective_query_time,
+            effective_valid_at=effective_valid_at,
+            effective_known_at=effective_known_at,
+            epistemic_semantics=query.options.epistemic_semantics,
+            explain=explain,
+        )
