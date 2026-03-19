@@ -1,5 +1,0 @@
-pred ok/1.
-ok(yes).
-pred badarity.
-?- ok(X).
-/- exit

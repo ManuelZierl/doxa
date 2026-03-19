@@ -1,5 +1,0 @@
-pred person/1.
-person(alice).
-person(bob).
-?- person(X).
-/- exit

@@ -110,6 +110,9 @@ class _EvidenceRow:
     d: float
 
 
+GroundAtomKey = Tuple[str, Tuple[Any, ...]]
+
+
 @dataclass(frozen=True)
 class _TruthRow:
     """
@@ -120,11 +123,15 @@ class _TruthRow:
 
     falsity:
         Falsity-support for the successful body.
+
+    atoms:
+        Grounded positive atoms used in this successful derivation.
     """
 
     subst: Subst
     support: float
     falsity: float
+    atoms: Tuple[GroundAtomKey, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,6 +168,10 @@ class ExplainCollector:
 # Core → internal compilation
 # ---------------------------------------------------------------------------
 
+def _strip_prefix(name: str, prefix: str) -> str:
+    if name.startswith(prefix):
+        return name[len(prefix):]
+    return name
 
 def _term(arg: Any) -> _Term:
     if hasattr(arg, "var"):
@@ -334,6 +345,15 @@ def _belief_arg_value(arg: BeliefArg) -> Any:
         return arg.value
     raise TypeError(f"Unsupported belief arg type: {type(arg)!r}")
 
+
+def _ground_atom_key(atom: _Atom, subst: Mapping[str, Any]) -> Optional[GroundAtomKey]:
+    values: List[Any] = []
+    for arg in atom.args:
+        value = _resolve(arg, dict(subst))
+        if value is None:
+            return None
+        values.append(value)
+    return atom.pred, tuple(values)
 
 def _match_rule_head(
     head_terms: Tuple[_Term, ...],
@@ -783,9 +803,73 @@ def _positive_atom_truth_rows(
     out: List[_TruthRow] = []
     for row in evidence_rows:
         if row.b > 0.0 or row.d > 0.0:
-            out.append(_TruthRow(subst=row.subst, support=row.b, falsity=row.d))
+            grounded = _ground_atom_key(goal, row.subst)
+            atoms: Tuple[GroundAtomKey, ...] = (grounded,) if grounded is not None else ()
+            out.append(
+                _TruthRow(
+                    subst=row.subst,
+                    support=row.b,
+                    falsity=row.d,
+                    atoms=atoms,
+                )
+            )
     return out
 
+def _constraint_violation_for_atoms(
+    atoms: Tuple[GroundAtomKey, ...],
+    ctx: _Context,
+    collector: Optional[ExplainCollector],
+    depth: int,
+) -> float:
+    if not atoms or not ctx.constraints:
+        return 0.0
+
+    atom_set = set(atoms)
+    violations: List[float] = []
+
+    for idx, constraint in enumerate(ctx.constraints):
+        prefix = f"_c{depth}_{idx}_"
+        body_goals = _compile_constraint_body(constraint, prefix)
+
+        for body_row in _solve_body_truth(
+            body_goals,
+            {},
+            ctx,
+            collector,
+            depth=depth + 1,
+            current_support=1.0,
+            current_falsity=0.0,
+            current_atoms=(),
+            apply_constraints=False,
+        ):
+            if not body_row.atoms:
+                continue
+
+            # Constraint only applies to this derivation if all grounded atoms
+            # used by the constraint are contained in the derivation footprint.
+            if not set(body_row.atoms).issubset(atom_set):
+                continue
+
+            applicability = _constraint_applicability(
+                body_row.support,
+                body_row.falsity,
+                ctx.query,
+            )
+            if applicability <= 0.0:
+                continue
+
+            propagation = ctx.query.options.epistemic_semantics.constraint_propagation
+            if (
+                propagation
+                != ConstraintPropagationSemantics.body_times_constraint_weights_to_violation
+            ):
+                raise ValueError(
+                    f"Unsupported constraint propagation semantics: {propagation!r}"
+                )
+
+            violations.append(applicability * constraint.b)
+
+    return _aggregate_values(violations, ctx.query)
 
 def _solve_body_truth(
     goals: Sequence[_Goal],
@@ -795,15 +879,33 @@ def _solve_body_truth(
     depth: int,
     current_support: float,
     current_falsity: float,
+    current_atoms: Tuple[GroundAtomKey, ...] = (),
+    apply_constraints: bool = True,
 ) -> Iterator[_TruthRow]:
     if depth > ctx.max_depth:
         return
 
     if not goals:
+        final_falsity = current_falsity
+
+        if apply_constraints:
+            violation = _constraint_violation_for_atoms(
+                current_atoms,
+                ctx,
+                collector,
+                depth,
+            )
+            if violation > 0.0:
+                final_falsity = _aggregate_values(
+                    [final_falsity, violation],
+                    ctx.query,
+                )
+
         yield _TruthRow(
             subst=subst,
             support=current_support,
-            falsity=current_falsity,
+            falsity=final_falsity,
+            atoms=current_atoms,
         )
         return
 
@@ -820,6 +922,8 @@ def _solve_body_truth(
                 depth,
                 current_support,
                 current_falsity,
+                current_atoms,
+                apply_constraints,
             )
         return
 
@@ -851,10 +955,12 @@ def _solve_body_truth(
                 depth,
                 current_support,
                 current_falsity,
+                current_atoms,
+                apply_constraints,
             )
         return
 
-    for atom_row in _positive_atom_truth_rows(goal, subst, ctx, collector, depth + 1):
+    for atom_row in _positive_atom_truth_rows(goal, subst, ctx, collector, depth):
         combined_support = _combine_truth(
             current_support,
             atom_row.support,
@@ -873,69 +979,9 @@ def _solve_body_truth(
             depth,
             combined_support,
             combined_falsity,
+            current_atoms + atom_row.atoms,
+            apply_constraints,
         )
-
-
-# ---------------------------------------------------------------------------
-# Constraint path (reusable hook; not yet surfaced in QueryResult)
-# ---------------------------------------------------------------------------
-
-
-def _constraint_violation_rows(
-    ctx: _Context,
-    collector: Optional[ExplainCollector],
-) -> Dict[str, List[_EvidenceRow]]:
-    """
-    Reusable constraint evaluation path.
-
-    This is intentionally not wired into QueryResult yet, because the result
-    contract currently has no dedicated violation surface.
-    """
-    out: Dict[str, List[_EvidenceRow]] = {}
-
-    for idx, constraint in enumerate(ctx.constraints):
-        prefix = f"_c{idx}_"
-        body_goals = _compile_constraint_body(constraint, prefix)
-
-        local_rows: List[_EvidenceRow] = []
-        for body_row in _solve_body_truth(
-            body_goals,
-            {},
-            ctx,
-            collector,
-            depth=1,
-            current_support=1.0,
-            current_falsity=0.0,
-        ):
-            applicability = _constraint_applicability(
-                body_row.support,
-                body_row.falsity,
-                ctx.query,
-            )
-            if applicability <= 0.0:
-                continue
-
-            propagation = ctx.query.options.epistemic_semantics.constraint_propagation
-            if (
-                propagation
-                != ConstraintPropagationSemantics.body_times_constraint_weights_to_violation
-            ):
-                raise ValueError(
-                    f"Unsupported constraint propagation semantics: {propagation!r}"
-                )
-
-            local_rows.append(
-                _EvidenceRow(
-                    subst=body_row.subst,
-                    b=applicability * constraint.b,
-                    d=applicability * constraint.d,
-                )
-            )
-
-        name = constraint.name or f"constraint_{idx}"
-        out[name] = _aggregate_evidence_rows(local_rows, ctx.query)
-
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -957,6 +1003,36 @@ def _project_bindings(
     subst: Mapping[str, Any], vars_to_keep: Set[str]
 ) -> Dict[str, Any]:
     return {k: v for k, v in subst.items() if k in vars_to_keep}
+
+def _should_inline_assume_goal(
+    goal: _Goal,
+    *,
+    compiled_goals: Sequence[_Goal],
+    fact_index: Dict[Tuple[str, int], List[BeliefRecord]],
+    idb_preds: Set[str],
+    query_vars: Set[str],
+) -> bool:
+    if not isinstance(goal, _Atom):
+        return False
+    if goal.negated:
+        return False
+    if goal.pred in idb_preds:
+        return False
+    if not all(isinstance(arg, _GroundTerm) for arg in goal.args):
+        return False
+
+    # Conservative: only allow implicit hypotheticals in exploratory queries
+    if not query_vars:
+        return False
+    if len(compiled_goals) <= 1:
+        return False
+
+    # Conservative: if this predicate already has visible facts,
+    # do not silently inject new hypothetical facts.
+    if (goal.pred, len(goal.args)) in fact_index:
+        return False
+
+    return True
 
 
 def _aggregate_answers_from_evidence(
@@ -1200,56 +1276,57 @@ class InMemoryQueryEngine(QueryEngine):
         # Fully-ground positive EDB atom goals become temporary facts with
         # b=1.0, d=0.0.  Only EDB predicates (no rules) are eligible.
         for goal in compiled_goals:
-            if (
-                isinstance(goal, _Atom)
-                and not goal.negated
-                and goal.pred not in idb_preds
-            ):
-                if all(isinstance(arg, _GroundTerm) for arg in goal.args):
-                    from doxa.core.base_kinds import BaseKind
+            if _should_inline_assume_goal(
+                goal,
+                compiled_goals=compiled_goals,
+                fact_index=fact_index,
+                idb_preds=idb_preds,
+                query_vars=query_vars,
+                    ):
+                from doxa.core.base_kinds import BaseKind
 
-                    belief_args = []
-                    for arg in goal.args:
-                        assert isinstance(arg, _GroundTerm)
-                        val = arg.value
-                        if isinstance(val, int):
-                            belief_args.append(
-                                BeliefLiteralArg(
-                                    kind=BaseKind.belief_arg,
-                                    term_kind=TermKind.lit,
-                                    lit_type=LiteralType.int,
-                                    value=val,
-                                )
+                belief_args = []
+                for arg in goal.args:
+                    assert isinstance(arg, _GroundTerm)
+                    val = arg.value
+                    if isinstance(val, int):
+                        belief_args.append(
+                            BeliefLiteralArg(
+                                kind=BaseKind.belief_arg,
+                                term_kind=TermKind.lit,
+                                lit_type=LiteralType.int,
+                                value=val,
                             )
-                        elif isinstance(val, float):
-                            belief_args.append(
-                                BeliefLiteralArg(
-                                    kind=BaseKind.belief_arg,
-                                    term_kind=TermKind.lit,
-                                    lit_type=LiteralType.float,
-                                    value=val,
-                                )
+                        )
+                    elif isinstance(val, float):
+                        belief_args.append(
+                            BeliefLiteralArg(
+                                kind=BaseKind.belief_arg,
+                                term_kind=TermKind.lit,
+                                lit_type=LiteralType.float,
+                                value=val,
                             )
-                        else:
-                            belief_args.append(
-                                BeliefEntityArg(
-                                    kind=BaseKind.belief_arg,
-                                    term_kind="ent",
-                                    ent_name=str(val),
-                                )
+                        )
+                    else:
+                        belief_args.append(
+                            BeliefEntityArg(
+                                kind=BaseKind.belief_arg,
+                                term_kind="ent",
+                                ent_name=str(val),
                             )
+                        )
 
-                    rec = BeliefRecord(
-                        kind=BaseKind.belief_record,
-                        created_at=datetime.now(timezone.utc),
-                        pred_name=goal.pred,
-                        pred_arity=len(goal.args),
-                        args=belief_args,
-                        b=1.0,
-                        d=0.0,
-                    )
-                    key = (rec.pred_name, rec.pred_arity)
-                    fact_index.setdefault(key, []).append(rec)
+                rec = BeliefRecord(
+                    kind=BaseKind.belief_record,
+                    created_at=datetime.now(timezone.utc),
+                    pred_name=goal.pred,
+                    pred_arity=len(goal.args),
+                    args=belief_args,
+                    b=1.0,
+                    d=0.0,
+                )
+                key = (rec.pred_name, rec.pred_arity)
+                fact_index.setdefault(key, []).append(rec)
 
         # Seed substitution with Skolem bindings so they appear in results
         initial_subst: Subst = {var: skolem for var, skolem in skolem_map.items()}
@@ -1270,56 +1347,32 @@ class InMemoryQueryEngine(QueryEngine):
 
         answers: List[QueryAnswer]
 
-        # Special-case: single positive atom query gets full atom-level (b,d).
-        if (
-            len(compiled_goals) == 1
-            and isinstance(compiled_goals[0], _Atom)
-            and not compiled_goals[0].negated
-        ):
-            atom = compiled_goals[0]
-            evidence_rows = _positive_atom_evidence(
-                atom,
+
+        truth_rows = list(
+            _solve_body_truth(
+                compiled_goals,
                 initial_subst,
                 ctx,
                 collector,
                 depth=0,
+                current_support=1.0,
+                current_falsity=0.0,
+                current_atoms=(),
+                apply_constraints=True,
             )
-            answers = _aggregate_answers_from_evidence(evidence_rows, query, query_vars)
+        )
+        answers = _aggregate_answers_from_truth(truth_rows, query, query_vars)
 
-            # Closed single-atom query: return a single neither-answer if unsupported.
-            if not query_vars and not answers:
-                answers = [
-                    QueryAnswer(
-                        bindings={},
-                        b=0.0,
-                        d=0.0,
-                        belnap_status=BelnapStatus.neither,
-                    )
-                ]
-        else:
-            truth_rows = list(
-                _solve_body_truth(
-                    compiled_goals,
-                    initial_subst,
-                    ctx,
-                    collector,
-                    depth=0,
-                    current_support=1.0,
-                    current_falsity=0.0,
+        # Closed query: return a single neither-answer if unsupported.
+        if not query_vars and not answers:
+            answers = [
+                QueryAnswer(
+                    bindings={},
+                    b=0.0,
+                    d=0.0,
+                    belnap_status=BelnapStatus.neither,
                 )
-            )
-            answers = _aggregate_answers_from_truth(truth_rows, query, query_vars)
-
-            # Closed general query: return a single neither-answer if unsupported.
-            if not query_vars and not answers:
-                answers = [
-                    QueryAnswer(
-                        bindings={},
-                        b=0.0,
-                        d=0.0,
-                        belnap_status=BelnapStatus.neither,
-                    )
-                ]
+            ]
 
         # ── Post-processing ──────────────────────────────────────────────────
         # Note: distinct is not needed -- answer aggregation merges identical

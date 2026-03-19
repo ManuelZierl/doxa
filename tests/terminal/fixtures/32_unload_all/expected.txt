@@ -1,9 +1,0 @@
-doxa>   Added: 1 predicate(s)
-doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   1: {'X': 'a'}
-  2: {'X': 'b'}
-doxa>   Branch reset to empty.
-doxa>   No results.
-doxa>
-doxa>   Goodbye.

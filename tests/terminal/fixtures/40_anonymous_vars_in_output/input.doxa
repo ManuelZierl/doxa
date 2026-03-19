@@ -1,9 +1,0 @@
-pred edge/2.
-edge(a, b).
-edge(b, c).
-edge(a, c).
-?- edge(a, X).
-?- edge(a, _).
-?- edge(_, _).
-?- edge(_, _) @{distinct:true}.
-/- exit

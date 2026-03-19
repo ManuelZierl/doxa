@@ -1,8 +1,0 @@
-pred p/1.
-p(a).
-p(b).
-?- p(X).
-/- unload all
-?- p(X).
-/- dump
-/- exit

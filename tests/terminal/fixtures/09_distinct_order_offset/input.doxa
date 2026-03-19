@@ -1,8 +1,0 @@
-pred score/2.
-score(alice, 90).
-score(bob, 75).
-score(carol, 90).
-score(dan, 60).
-?- score(Name, S) @{order_by:"S, Name"}.
-?- score(Name, S) @{order_by:"S", offset:1, limit:2}.
-/- exit

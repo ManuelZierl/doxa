@@ -50,12 +50,15 @@ def _normalise(text: str) -> str:
 def _collect_fixtures() -> list[tuple[str, Path]]:
     if not FIXTURES_DIR.exists():
         return []
-    dirs = sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir())
-    return [
-        (d.name, d)
-        for d in dirs
-        if (d / "input.doxa").exists() and (d / "expected.txt").exists()
-    ]
+    results = []
+    for category in sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir()):
+        for fixture in sorted(p for p in category.iterdir() if p.is_dir()):
+            if (fixture / "input.doxa").exists() and (
+                fixture / "expected.txt"
+            ).exists():
+                label = f"{category.name}/{fixture.name}"
+                results.append((label, fixture))
+    return results
 
 
 @pytest.mark.parametrize(

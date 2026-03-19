@@ -1,8 +1,0 @@
-pred note/2.
-note(alice, "hello world").
-note(bob, "foo bar").
-note(carol, "hello world").
-?- note(X, "hello world").
-?- note(X, M).
-?- note(X, "missing").
-/- exit

@@ -1,9 +1,0 @@
-pred bird/1.
-pred penguin/1.
-pred flies/1.
-bird(tweety).
-bird(opus).
-penguin(opus).
-flies(X) :- bird(X), not penguin(X).
-?- flies(X).
-/- exit

@@ -1,8 +1,0 @@
-pred num/1.
-num(3).
-num(7).
-?- num(X), add(X, 10, R).
-?- sub(20, 8, R).
-?- mul(4, 5, R).
-?- div(15, 3, R).
-/- exit
