@@ -1,0 +1,6 @@
+pred item/1.
+item(x).
+item(y).
+/- dump
+/- search item
+/- exit

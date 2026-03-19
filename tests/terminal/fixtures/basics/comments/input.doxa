@@ -1,0 +1,7 @@
+pred item/1.
+item(a).
+% this line is a comment and should be ignored
+item(b).
+item(c).
+?- item(X).
+/- exit

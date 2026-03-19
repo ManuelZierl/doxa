@@ -1,0 +1,19 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa> pred employee/2 @{description:"Maps employee name to department"}.
+pred dept/1 @{description:"Known departments"}.
+employee(alice, engineering) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663296Z"}.
+employee(bob, marketing) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663911Z"}.
+dept(engineering) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663911Z"}.
+dept(marketing) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663911Z"}.
+doxa>   Predicates (1):
+    pred employee/2  — Maps employee name to department
+  Belief records (2):
+    employee(alice, engineering) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663296Z"}
+    employee(bob, marketing) @{b:1.0, d:0.0, et:"2026-03-19T10:10:31.663911Z"}
+doxa>   1: X='alice' | b=1, d=0, status=true
+doxa>   Goodbye.

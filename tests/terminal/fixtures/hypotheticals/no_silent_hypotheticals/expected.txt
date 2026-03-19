@@ -1,0 +1,5 @@
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   No results.
+doxa>   1: X='a' | b=1, d=0, status=true
+doxa>   1: b=0, d=0, status=neither
+doxa>   Goodbye.

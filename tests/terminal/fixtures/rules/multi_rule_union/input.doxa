@@ -1,0 +1,14 @@
+pred dog/1.
+pred cat/1.
+pred bird/1.
+pred pet/1.
+dog(rex).
+dog(buddy).
+cat(whiskers).
+bird(tweety).
+pet(X) :- dog(X).
+pet(X) :- cat(X).
+pet(X) :- bird(X).
+?- pet(X).
+?- pet(X), not dog(X).
+/- exit

@@ -1,0 +1,5 @@
+pred val/1.
+val(42).
+?- val(X), eq(X, 42).
+?- eq(Y, 7).
+/- exit

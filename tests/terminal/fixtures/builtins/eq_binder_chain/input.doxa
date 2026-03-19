@@ -1,0 +1,9 @@
+pred p/2.
+p(a, 1).
+p(b, 2).
+p(c, 3).
+?- p(X, V), eq(Y, V), gt(Y, 1).
+?- p(X, V), eq(X, b).
+?- eq(X, 42), add(X, 8, R).
+?- eq(X, Y).
+/- exit

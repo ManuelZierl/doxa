@@ -1,0 +1,12 @@
+ pred val/1.
+val(10).
+val(20).
+val(30).
+val(40).
+val(50).
+?- val(X) @{order_by:"X", limit:2}.
+?- val(X) @{order_by:"X", offset:3}.
+?- val(X) @{order_by:"X", limit:2, offset:1}.
+?- val(X) @{limit:0}.
+?- val(X) @{offset:10}.
+/- exit

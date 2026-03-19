@@ -1,0 +1,9 @@
+pred p/1.
+pred q/2.
+p(a).
+p(b).
+q(a, 1).
+q(b, 2).
+/- dump --no-predicates
+/- dump --no-belief-records
+/- exit

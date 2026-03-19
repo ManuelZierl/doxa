@@ -1,0 +1,5 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: X='thomas' | b=1, d=0, status=true
+doxa>   No results.
+doxa>   Goodbye.

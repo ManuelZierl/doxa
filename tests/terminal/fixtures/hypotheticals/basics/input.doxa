@@ -1,0 +1,5 @@
+pred parent/2.
+?- parent(thomas, manuel), parent(X, manuel).
+?- parent(X, manuel).
+?- parent(thomas, manuel).
+/-exit

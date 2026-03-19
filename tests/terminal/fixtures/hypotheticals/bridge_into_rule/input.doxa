@@ -1,0 +1,5 @@
+pred parent/2.
+ancestor(X, Y) :- parent(X, Y).
+?- parent(thomas, manuel), ancestor(X, manuel).
+?- ancestor(X, manuel).
+/-exit

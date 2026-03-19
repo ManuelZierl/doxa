@@ -1,0 +1,7 @@
+pred base/2.
+pred doubled/2.
+base(a, 10).
+base(b, 20).
+doubled(X, R) :- base(X, V), mul(V, 2, R).
+?- doubled(X, R).
+/- exit
