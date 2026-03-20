@@ -34,13 +34,13 @@ def test_rule_head_var_arg_from_doxa() -> None:
 
 
 def test_rule_head_entity_arg_from_doxa() -> None:
-    arg = RuleHeadEntityArg.from_doxa("thomas")
+    arg = RuleHeadEntityArg.from_doxa("zeus")
 
     assert arg.kind == BaseKind.rule_head_arg
     assert arg.term_kind == TermKind.ent
     assert arg.pos == 0
-    assert arg.ent_name == "thomas"
-    assert arg.to_doxa() == "thomas"
+    assert arg.ent_name == "zeus"
+    assert arg.to_doxa() == "zeus"
 
 
 def test_rule_head_literal_arg_from_doxa_string() -> None:
@@ -104,9 +104,9 @@ def test_rule_head_arg_dispatch_var() -> None:
 
 
 def test_rule_head_arg_dispatch_entity() -> None:
-    arg = rule_head_arg_from_doxa("thomas")
+    arg = rule_head_arg_from_doxa("zeus")
     assert isinstance(arg, RuleHeadEntityArg)
-    assert arg.ent_name == "thomas"
+    assert arg.ent_name == "zeus"
 
 
 def test_rule_head_arg_dispatch_literal_string() -> None:
@@ -139,13 +139,13 @@ def test_rule_goal_var_arg_from_doxa() -> None:
 
 
 def test_rule_goal_entity_arg_from_doxa() -> None:
-    arg = RuleGoalEntityArg.from_doxa("thomas")
+    arg = RuleGoalEntityArg.from_doxa("zeus")
 
     assert arg.kind == BaseKind.rule_goal_arg
     assert arg.term_kind == TermKind.ent
     assert arg.pos == 0
-    assert arg.ent_name == "thomas"
-    assert arg.to_doxa() == "thomas"
+    assert arg.ent_name == "zeus"
+    assert arg.to_doxa() == "zeus"
 
 
 def test_rule_goal_literal_arg_from_doxa_string() -> None:
@@ -209,9 +209,9 @@ def test_rule_goal_arg_dispatch_var() -> None:
 
 
 def test_rule_goal_arg_dispatch_entity() -> None:
-    arg = rule_goal_arg_from_doxa("thomas")
+    arg = rule_goal_arg_from_doxa("zeus")
     assert isinstance(arg, RuleGoalEntityArg)
-    assert arg.ent_name == "thomas"
+    assert arg.ent_name == "zeus"
 
 
 def test_rule_goal_arg_dispatch_literal_string() -> None:
@@ -234,7 +234,7 @@ def test_rule_goal_arg_dispatch_rejects_invalid_input() -> None:
 
 
 def test_rule_atom_goal_from_doxa() -> None:
-    goal = RuleAtomGoal.from_doxa("parent(X, thomas)")
+    goal = RuleAtomGoal.from_doxa("parent(X, zeus)")
 
     assert goal.kind == BaseKind.rule_goal
     assert goal.goal_kind == GoalKind.atom
@@ -247,14 +247,14 @@ def test_rule_atom_goal_from_doxa() -> None:
     assert isinstance(goal.goal_args[1], RuleGoalEntityArg)
     assert goal.goal_args[0].pos == 0
     assert goal.goal_args[1].pos == 1
-    assert goal.to_doxa() == "parent(X, thomas)"
+    assert goal.to_doxa() == "parent(X, zeus)"
 
 
 def test_rule_atom_goal_from_doxa_negated() -> None:
-    goal = RuleAtomGoal.from_doxa("not parent(X, thomas)")
+    goal = RuleAtomGoal.from_doxa("not parent(X, zeus)")
 
     assert goal.negated is True
-    assert goal.to_doxa() == "not parent(X, thomas)"
+    assert goal.to_doxa() == "not parent(X, zeus)"
 
 
 def test_rule_atom_goal_rejects_builtin_input() -> None:

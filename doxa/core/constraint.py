@@ -5,21 +5,13 @@ from typing import Dict, List, Literal
 
 from pydantic import Field, model_validator
 
-from doxa.core._parsing.annotation_utils import (
-    extract_annotation_kwargs,
-)
-from doxa.core._parsing.parsing_utils import (
-    split_annotation_suffix,
-    split_top_level,
-)
+from doxa.core._parsing.annotation_utils import extract_annotation_kwargs
+from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 from doxa.core.annotate_mixin import AnnotateMixin
 from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.goal import (
-    Goal,
-    goal_from_doxa,
-)
+from doxa.core.goal import Goal, goal_from_doxa
 
 
 class Constraint(Base, AuditMixin, AnnotateMixin):

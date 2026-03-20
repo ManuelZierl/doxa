@@ -14,10 +14,7 @@ from doxa.core.epistemic_semantics import (
     DEFAULT_EPISTEMIC_SEMANTICS,
     EpistemicSemanticsConfig,
 )
-from doxa.core.goal import (
-    Goal,
-    goal_from_doxa,
-)
+from doxa.core.goal import Goal, goal_from_doxa
 from doxa.core.schema_utils import compact_schema_for_llm
 
 

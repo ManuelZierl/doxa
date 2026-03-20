@@ -3,12 +3,15 @@ from pydantic import ValidationError
 
 from doxa.core.base_kinds import BaseKind
 from doxa.core.builtins import Builtin
-from doxa.core.constraint import (
-    Constraint,
+from doxa.core.constraint import Constraint, goal_from_doxa
+from doxa.core.goal import (
+    AtomGoal,
+    BuiltinGoal,
+    EntityArg,
+    LiteralArg,
+    VarArg,
     goal_arg_from_doxa,
-    goal_from_doxa,
 )
-from doxa.core.goal import AtomGoal, BuiltinGoal, EntityArg, LiteralArg, VarArg
 from doxa.core.goal_kinds import GoalKind
 from doxa.core.literal_type import LiteralType
 from doxa.core.var import Var
@@ -25,13 +28,13 @@ def test_constraint_var_arg_from_doxa() -> None:
 
 
 def test_constraint_entity_arg_from_doxa() -> None:
-    arg = EntityArg.from_doxa("thomas")
+    arg = EntityArg.from_doxa("zeus")
 
     assert arg.kind == BaseKind.goal_arg
     assert arg.term_kind == "ent"
     assert arg.pos == 0
-    assert arg.ent_name == "thomas"
-    assert arg.to_doxa() == "thomas"
+    assert arg.ent_name == "zeus"
+    assert arg.to_doxa() == "zeus"
 
 
 def test_constraint_literal_arg_from_doxa_string() -> None:
@@ -95,9 +98,9 @@ def test_constraint_goal_arg_dispatch_var() -> None:
 
 
 def test_constraint_goal_arg_dispatch_entity() -> None:
-    arg = goal_arg_from_doxa("thomas")
+    arg = goal_arg_from_doxa("zeus")
     assert isinstance(arg, EntityArg)
-    assert arg.ent_name == "thomas"
+    assert arg.ent_name == "zeus"
 
 
 def test_constraint_goal_arg_dispatch_literal_string() -> None:
@@ -120,7 +123,7 @@ def test_constraint_goal_arg_dispatch_rejects_invalid_input() -> None:
 
 
 def test_constraint_atom_goal_from_doxa() -> None:
-    goal = AtomGoal.from_doxa("parent(X, thomas)")
+    goal = AtomGoal.from_doxa("parent(X, zeus)")
 
     assert goal.kind == BaseKind.goal
     assert goal.goal_kind == GoalKind.atom
@@ -133,14 +136,14 @@ def test_constraint_atom_goal_from_doxa() -> None:
     assert isinstance(goal.goal_args[1], EntityArg)
     assert goal.goal_args[0].pos == 0
     assert goal.goal_args[1].pos == 1
-    assert goal.to_doxa() == "parent(X, thomas)"
+    assert goal.to_doxa() == "parent(X, zeus)"
 
 
 def test_constraint_atom_goal_from_doxa_negated() -> None:
-    goal = AtomGoal.from_doxa("not parent(X, thomas)")
+    goal = AtomGoal.from_doxa("not parent(X, zeus)")
 
     assert goal.negated is True
-    assert goal.to_doxa() == "not parent(X, thomas)"
+    assert goal.to_doxa() == "not parent(X, zeus)"
 
 
 def test_constraint_atom_goal_rejects_builtin_input() -> None:

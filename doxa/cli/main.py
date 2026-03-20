@@ -22,12 +22,7 @@ from pathlib import Path
 import click
 
 from doxa.__version__ import __version__
-from doxa.cli.compat import (
-    ENGINE_KINDS,
-    MEMORY_KINDS,
-    check_compat,
-    default_engine_for,
-)
+from doxa.cli.compat import ENGINE_KINDS, MEMORY_KINDS, check_compat, default_engine_for
 from doxa.cli.merge import merge_command
 from doxa.cli.prompt import extract_prompt_command, query_prompt_command
 

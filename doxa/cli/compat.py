@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 # Map of (memory_kind, engine_kind) -> compatible
 _COMPAT: dict[tuple[str, str], bool] = {
     ("memory", "memory"): True,
