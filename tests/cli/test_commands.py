@@ -1,30 +1,30 @@
 import json
 import sys
-
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 from pydantic import ValidationError
 
 from doxa.cli.commands import (
-    cmd_dump,
-    cmd_info,
-    cmd_schema,
-    cmd_load,
-    cmd_unload,
-    cmd_search,
-    cmd_exit,
-    dispatch,
-    _load_file,
-    _auto_fix_kinds,
-    _branch_to_doxa,
-    _branch_to_dict,
-    _parse_dump_args,
     HELP_TEXT,
+    _auto_fix_kinds,
+    _branch_to_dict,
+    _branch_to_doxa,
+    _load_file,
+    _parse_dump_args,
+    cmd_dump,
+    cmd_exit,
+    cmd_info,
+    cmd_load,
+    cmd_schema,
+    cmd_search,
+    cmd_unload,
+    dispatch,
 )
 from doxa.cli.terminal import TerminalState
-from doxa.core.branch import Branch
 from doxa.core.base_kinds import BaseKind
+from doxa.core.branch import Branch
 
 
 @pytest.fixture

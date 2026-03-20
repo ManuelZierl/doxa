@@ -1,8 +1,8 @@
 import pytest
 
 from doxa.core.base_kinds import BaseKind
-from doxa.core.branch import Branch
 from doxa.core.belief_record import BeliefRecord
+from doxa.core.branch import Branch
 from doxa.core.constraint import Constraint
 from doxa.core.rule import Rule
 

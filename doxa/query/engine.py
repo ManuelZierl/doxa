@@ -7,19 +7,19 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from doxa.core.branch import Branch
 from doxa.core.epistemic_semantics import (
-    BodyTruthSemantics,
-    BodyFalsitySemantics,
-    EpistemicSemanticsCapabilities,
-    RulePropagationSemantics,
-    ConstraintPropagationSemantics,
-    SupportAggregationSemantics,
-    BelnapStatusSemantics,
-    NonAtomSemantics,
-    RuleApplicabilitySemantics,
-    ConstraintApplicabilitySemantics,
-    EpistemicSemanticsConfig,
     DEFAULT_EPISTEMIC_SEMANTICS,
     BelnapStatus,
+    BelnapStatusSemantics,
+    BodyFalsitySemantics,
+    BodyTruthSemantics,
+    ConstraintApplicabilitySemantics,
+    ConstraintPropagationSemantics,
+    EpistemicSemanticsCapabilities,
+    EpistemicSemanticsConfig,
+    NonAtomSemantics,
+    RuleApplicabilitySemantics,
+    RulePropagationSemantics,
+    SupportAggregationSemantics,
 )
 from doxa.core.query import Query
 

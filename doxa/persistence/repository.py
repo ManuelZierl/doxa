@@ -5,11 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-from doxa.core.branch import Branch
 from doxa.core.belief_record import BeliefRecord
-from doxa.core.rule import Rule
+from doxa.core.branch import Branch
 from doxa.core.constraint import Constraint
 from doxa.core.predicate import Predicate
+from doxa.core.rule import Rule
 
 
 class BranchRepository(ABC):

@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
+
 from doxa.core.base_kinds import BaseKind
 
 

@@ -16,15 +16,15 @@ from typing import (
     Union,
 )
 
-from doxa.core import TermKind, LiteralType
-from doxa.core.branch import Branch
-from doxa.core.builtins import Builtin
+from doxa.core import LiteralType, TermKind
 from doxa.core.belief_record import (
     BeliefArg,
     BeliefEntityArg,
     BeliefLiteralArg,
     BeliefRecord,
 )
+from doxa.core.branch import Branch
+from doxa.core.builtins import Builtin
 from doxa.core.constraint import Constraint
 from doxa.core.epistemic_semantics import (
     BelnapStatusSemantics,

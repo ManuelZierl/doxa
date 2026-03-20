@@ -4,21 +4,20 @@ from typing import Annotated, List, Literal, Union
 
 from pydantic import Field, model_validator
 
-from doxa.core.base import Base
-from doxa.core.base_kinds import BaseKind
-from doxa.core.builtins import Builtin, BUILTIN_ARITY
-from doxa.core.entity import Entity
-from doxa.core.goal_kinds import GoalKind
-from doxa.core.literal_type import LiteralType
-from doxa.core.var import Var
 from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
     parse_python_string_literal,
-    render_string_literal,
     split_top_level,
 )
+from doxa.core.base import Base
+from doxa.core.base_kinds import BaseKind
+from doxa.core.builtins import BUILTIN_ARITY, Builtin
+from doxa.core.entity import Entity
+from doxa.core.goal_kinds import GoalKind
+from doxa.core.literal_type import LiteralType
+from doxa.core.var import Var
 
 _GOAL_CALL_RE = get_goal_call_regex()
 _INT_RE = get_int_regex()

@@ -1,13 +1,16 @@
 import re
-from typing import Optional, Literal, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from doxa.core.base import Base
-from doxa.core.base_kinds import BaseKind
-from doxa.core.builtins import Builtin, BUILTIN_ARITY
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_top_level
+from doxa.core.base import Base
+from doxa.core.base_kinds import BaseKind
+from doxa.core.builtins import BUILTIN_ARITY, Builtin
+
+if TYPE_CHECKING:
+    from doxa.core.constraint import Constraint
 
 _PRED_RE = re.compile(
     r"""
@@ -172,11 +175,12 @@ class Predicate(Base):
             return []
 
         # Import here to avoid circular dependency
+        from datetime import datetime, timezone
+
         from doxa.core.constraint import Constraint
         from doxa.core.goal import AtomGoal, VarArg
-        from doxa.core.var import Var
         from doxa.core.goal_kinds import GoalKind
-        from datetime import datetime, timezone
+        from doxa.core.var import Var
 
         constraints: List[Constraint] = []
 

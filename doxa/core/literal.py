@@ -4,9 +4,9 @@ from typing import Union
 
 from pydantic import Field
 
-from doxa.core.literal_type import LiteralType
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
+from doxa.core.literal_type import LiteralType
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?$")

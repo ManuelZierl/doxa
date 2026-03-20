@@ -1,9 +1,10 @@
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 from click.testing import CliRunner
 
-from doxa.cli.main import cli, _make_repo, _make_engine
+from doxa.cli.main import _make_engine, _make_repo, cli
 
 
 def test_cli_default_memory_backend() -> None:
@@ -170,7 +171,7 @@ def test_make_repo_postgres() -> None:
             "doxa.persistence.postgres.PostgresBranchRepository"
         ) as mock_postgres:
             mock_postgres.return_value = MagicMock()
-            repo = _make_repo("postgres")
+            _make_repo("postgres")
 
             mock_postgres.assert_called_once_with("postgresql://localhost/test")
 
@@ -181,7 +182,7 @@ def test_make_repo_postgres_default_url() -> None:
             "doxa.persistence.postgres.PostgresBranchRepository"
         ) as mock_postgres:
             mock_postgres.return_value = MagicMock()
-            repo = _make_repo("postgres")
+            _make_repo("postgres")
 
             mock_postgres.assert_called_once_with("postgresql://localhost/doxa")
 
@@ -205,7 +206,7 @@ def test_make_engine_postgres() -> None:
     with patch.dict("os.environ", {"DOXA_POSTGRES_URL": "postgresql://localhost/test"}):
         with patch("doxa.query.postgres.PostgresQueryEngine") as mock_postgres:
             mock_postgres.return_value = MagicMock()
-            engine = _make_engine("postgres")
+            _make_engine("postgres")
 
             mock_postgres.assert_called_once_with("postgresql://localhost/test")
 
@@ -214,7 +215,7 @@ def test_make_engine_postgres_default_url() -> None:
     with patch.dict("os.environ", {}, clear=True):
         with patch("doxa.query.postgres.PostgresQueryEngine") as mock_postgres:
             mock_postgres.return_value = MagicMock()
-            engine = _make_engine("postgres")
+            _make_engine("postgres")
 
             mock_postgres.assert_called_once_with("postgresql://localhost/doxa")
 

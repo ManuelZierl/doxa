@@ -5,21 +5,17 @@ from doxa.core.base_kinds import BaseKind
 from doxa.core.builtins import Builtin
 from doxa.core.constraint import (
     Constraint,
-    ConstraintAtomGoal,
-    ConstraintBuiltinGoal,
-    ConstraintEntityArg,
-    ConstraintLiteralArg,
-    ConstraintVarArg,
-    constraint_goal_arg_from_doxa,
-    constraint_goal_from_doxa,
+    goal_arg_from_doxa,
+    goal_from_doxa,
 )
+from doxa.core.goal import AtomGoal, BuiltinGoal, EntityArg, LiteralArg, VarArg
 from doxa.core.goal_kinds import GoalKind
 from doxa.core.literal_type import LiteralType
 from doxa.core.var import Var
 
 
 def test_constraint_var_arg_from_doxa() -> None:
-    arg = ConstraintVarArg.from_doxa("X")
+    arg = VarArg.from_doxa("X")
 
     assert arg.kind == BaseKind.goal_arg
     assert arg.term_kind == "var"
@@ -29,7 +25,7 @@ def test_constraint_var_arg_from_doxa() -> None:
 
 
 def test_constraint_entity_arg_from_doxa() -> None:
-    arg = ConstraintEntityArg.from_doxa("thomas")
+    arg = EntityArg.from_doxa("thomas")
 
     assert arg.kind == BaseKind.goal_arg
     assert arg.term_kind == "ent"
@@ -39,7 +35,7 @@ def test_constraint_entity_arg_from_doxa() -> None:
 
 
 def test_constraint_literal_arg_from_doxa_string() -> None:
-    arg = ConstraintLiteralArg.from_doxa('"hello world"')
+    arg = LiteralArg.from_doxa('"hello world"')
 
     assert arg.kind == BaseKind.goal_arg
     assert arg.term_kind == "lit"
@@ -50,7 +46,7 @@ def test_constraint_literal_arg_from_doxa_string() -> None:
 
 
 def test_constraint_literal_arg_from_doxa_int() -> None:
-    arg = ConstraintLiteralArg.from_doxa("42")
+    arg = LiteralArg.from_doxa("42")
 
     assert arg.lit_type == LiteralType.int
     assert arg.value == 42
@@ -58,7 +54,7 @@ def test_constraint_literal_arg_from_doxa_int() -> None:
 
 
 def test_constraint_literal_arg_from_doxa_float() -> None:
-    arg = ConstraintLiteralArg.from_doxa("3.14")
+    arg = LiteralArg.from_doxa("3.14")
 
     assert arg.lit_type == LiteralType.float
     assert arg.value == 3.14
@@ -67,12 +63,12 @@ def test_constraint_literal_arg_from_doxa_float() -> None:
 
 def test_constraint_literal_arg_rejects_invalid_literal() -> None:
     with pytest.raises(ValueError, match="Invalid literal argument"):
-        ConstraintLiteralArg.from_doxa("not_a_literal")
+        LiteralArg.from_doxa("not_a_literal")
 
 
 def test_constraint_literal_arg_rejects_wrong_type_for_int() -> None:
     with pytest.raises(ValidationError):
-        ConstraintLiteralArg(
+        LiteralArg(
             kind=BaseKind.goal_arg,
             pos=0,
             term_kind="lit",
@@ -83,7 +79,7 @@ def test_constraint_literal_arg_rejects_wrong_type_for_int() -> None:
 
 def test_constraint_literal_arg_rejects_wrong_type_for_float() -> None:
     with pytest.raises(ValidationError):
-        ConstraintLiteralArg(
+        LiteralArg(
             kind=BaseKind.goal_arg,
             pos=0,
             term_kind="lit",
@@ -93,38 +89,38 @@ def test_constraint_literal_arg_rejects_wrong_type_for_float() -> None:
 
 
 def test_constraint_goal_arg_dispatch_var() -> None:
-    arg = constraint_goal_arg_from_doxa("X")
-    assert isinstance(arg, ConstraintVarArg)
+    arg = goal_arg_from_doxa("X")
+    assert isinstance(arg, VarArg)
     assert arg.var == Var.from_doxa("X")
 
 
 def test_constraint_goal_arg_dispatch_entity() -> None:
-    arg = constraint_goal_arg_from_doxa("thomas")
-    assert isinstance(arg, ConstraintEntityArg)
+    arg = goal_arg_from_doxa("thomas")
+    assert isinstance(arg, EntityArg)
     assert arg.ent_name == "thomas"
 
 
 def test_constraint_goal_arg_dispatch_literal_string() -> None:
-    arg = constraint_goal_arg_from_doxa('"abc"')
-    assert isinstance(arg, ConstraintLiteralArg)
+    arg = goal_arg_from_doxa('"abc"')
+    assert isinstance(arg, LiteralArg)
     assert arg.lit_type == LiteralType.str
     assert arg.value == "abc"
 
 
 def test_constraint_goal_arg_dispatch_literal_int() -> None:
-    arg = constraint_goal_arg_from_doxa("10")
-    assert isinstance(arg, ConstraintLiteralArg)
+    arg = goal_arg_from_doxa("10")
+    assert isinstance(arg, LiteralArg)
     assert arg.lit_type == LiteralType.int
     assert arg.value == 10
 
 
 def test_constraint_goal_arg_dispatch_rejects_invalid_input() -> None:
     with pytest.raises(ValueError, match="Invalid goal argument"):
-        constraint_goal_arg_from_doxa("")
+        goal_arg_from_doxa("")
 
 
 def test_constraint_atom_goal_from_doxa() -> None:
-    goal = ConstraintAtomGoal.from_doxa("parent(X, thomas)")
+    goal = AtomGoal.from_doxa("parent(X, thomas)")
 
     assert goal.kind == BaseKind.goal
     assert goal.goal_kind == GoalKind.atom
@@ -133,15 +129,15 @@ def test_constraint_atom_goal_from_doxa() -> None:
     assert goal.pred_arity == 2
     assert goal.negated is False
     assert len(goal.goal_args) == 2
-    assert isinstance(goal.goal_args[0], ConstraintVarArg)
-    assert isinstance(goal.goal_args[1], ConstraintEntityArg)
+    assert isinstance(goal.goal_args[0], VarArg)
+    assert isinstance(goal.goal_args[1], EntityArg)
     assert goal.goal_args[0].pos == 0
     assert goal.goal_args[1].pos == 1
     assert goal.to_doxa() == "parent(X, thomas)"
 
 
 def test_constraint_atom_goal_from_doxa_negated() -> None:
-    goal = ConstraintAtomGoal.from_doxa("not parent(X, thomas)")
+    goal = AtomGoal.from_doxa("not parent(X, thomas)")
 
     assert goal.negated is True
     assert goal.to_doxa() == "not parent(X, thomas)"
@@ -149,12 +145,12 @@ def test_constraint_atom_goal_from_doxa_negated() -> None:
 
 def test_constraint_atom_goal_rejects_builtin_input() -> None:
     with pytest.raises(ValueError, match="Builtin goal cannot be parsed as AtomGoal"):
-        ConstraintAtomGoal.from_doxa("eq(X, Y)")
+        AtomGoal.from_doxa("eq(X, Y)")
 
 
 def test_constraint_atom_goal_rejects_wrong_arity() -> None:
     with pytest.raises(ValidationError):
-        ConstraintAtomGoal(
+        AtomGoal(
             kind=BaseKind.goal,
             goal_kind=GoalKind.atom,
             idx=0,
@@ -162,21 +158,21 @@ def test_constraint_atom_goal_rejects_wrong_arity() -> None:
             pred_arity=2,
             negated=False,
             goal_args=[
-                ConstraintVarArg.from_doxa("X"),
+                VarArg.from_doxa("X"),
             ],
         )
 
 
 def test_constraint_builtin_goal_from_doxa() -> None:
-    goal = ConstraintBuiltinGoal.from_doxa("eq(X, Y)")
+    goal = BuiltinGoal.from_doxa("eq(X, Y)")
 
     assert goal.kind == BaseKind.goal
     assert goal.goal_kind == GoalKind.builtin
     assert goal.idx == 0
     assert goal.builtin_name == Builtin.eq
     assert len(goal.goal_args) == 2
-    assert isinstance(goal.goal_args[0], ConstraintVarArg)
-    assert isinstance(goal.goal_args[1], ConstraintVarArg)
+    assert isinstance(goal.goal_args[0], VarArg)
+    assert isinstance(goal.goal_args[1], VarArg)
     assert goal.goal_args[0].pos == 0
     assert goal.goal_args[1].pos == 1
     assert goal.to_doxa() == "eq(X, Y)"
@@ -184,44 +180,44 @@ def test_constraint_builtin_goal_from_doxa() -> None:
 
 def test_constraint_builtin_goal_rejects_negation() -> None:
     with pytest.raises(ValueError, match="Builtin goals cannot be negated"):
-        ConstraintBuiltinGoal.from_doxa("not eq(X, Y)")
+        BuiltinGoal.from_doxa("not eq(X, Y)")
 
 
 def test_constraint_builtin_goal_rejects_unknown_builtin() -> None:
     with pytest.raises(ValueError, match="Unknown builtin goal"):
-        ConstraintBuiltinGoal.from_doxa("foo(X, Y)")
+        BuiltinGoal.from_doxa("foo(X, Y)")
 
 
 def test_constraint_builtin_goal_rejects_wrong_arity() -> None:
     with pytest.raises(ValidationError):
-        ConstraintBuiltinGoal(
+        BuiltinGoal(
             kind=BaseKind.goal,
             goal_kind=GoalKind.builtin,
             idx=0,
             builtin_name=Builtin.eq,
-            goal_args=[ConstraintVarArg.from_doxa("X")],
+            goal_args=[VarArg.from_doxa("X")],
         )
 
 
 def test_constraint_goal_dispatch_atom() -> None:
-    goal = constraint_goal_from_doxa("parent(X, Y)")
-    assert isinstance(goal, ConstraintAtomGoal)
+    goal = goal_from_doxa("parent(X, Y)")
+    assert isinstance(goal, AtomGoal)
 
 
 def test_constraint_goal_dispatch_builtin() -> None:
-    goal = constraint_goal_from_doxa("eq(X, Y)")
-    assert isinstance(goal, ConstraintBuiltinGoal)
+    goal = goal_from_doxa("eq(X, Y)")
+    assert isinstance(goal, BuiltinGoal)
 
 
 def test_constraint_goal_dispatch_negated_atom() -> None:
-    goal = constraint_goal_from_doxa("not parent(X, Y)")
-    assert isinstance(goal, ConstraintAtomGoal)
+    goal = goal_from_doxa("not parent(X, Y)")
+    assert isinstance(goal, AtomGoal)
     assert goal.negated is True
 
 
 def test_constraint_goal_dispatch_rejects_negated_builtin() -> None:
     with pytest.raises(ValueError, match="Builtin goals cannot be negated"):
-        constraint_goal_from_doxa("not eq(X, Y)")
+        goal_from_doxa("not eq(X, Y)")
 
 
 def test_constraint_from_doxa_simple() -> None:
@@ -229,8 +225,8 @@ def test_constraint_from_doxa_simple() -> None:
 
     assert c.kind == BaseKind.constraint
     assert len(c.goals) == 2
-    assert isinstance(c.goals[0], ConstraintAtomGoal)
-    assert isinstance(c.goals[1], ConstraintAtomGoal)
+    assert isinstance(c.goals[0], AtomGoal)
+    assert isinstance(c.goals[1], AtomGoal)
     assert c.goals[0].idx == 0
     assert c.goals[1].idx == 1
     assert c.goals[1].negated is True
@@ -241,8 +237,8 @@ def test_constraint_from_doxa_with_builtin() -> None:
     c = Constraint.from_doxa("!:- risk_score(X, S), lt(S, 0)")
 
     assert len(c.goals) == 2
-    assert isinstance(c.goals[0], ConstraintAtomGoal)
-    assert isinstance(c.goals[1], ConstraintBuiltinGoal)
+    assert isinstance(c.goals[0], AtomGoal)
+    assert isinstance(c.goals[1], BuiltinGoal)
     assert c.goals[1].builtin_name == Builtin.lt
     assert c.to_doxa().startswith("!:- risk_score(X, S), lt(S, 0)")
 
@@ -286,8 +282,8 @@ def test_constraint_from_doxa_rejects_empty_body() -> None:
 
 
 def test_constraint_goal_indices_must_be_contiguous() -> None:
-    g0 = ConstraintAtomGoal.from_doxa("parent(X, Y)")
-    g1 = ConstraintAtomGoal.from_doxa("person(X)")
+    g0 = AtomGoal.from_doxa("parent(X, Y)")
+    g1 = AtomGoal.from_doxa("person(X)")
 
     with pytest.raises(ValidationError):
         Constraint(

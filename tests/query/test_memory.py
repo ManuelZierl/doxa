@@ -21,7 +21,6 @@ from doxa.query.engine import BelnapStatus
 # Adjust only this import if your file/module name differs.
 from doxa.query.memory import InMemoryQueryEngine
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -6,10 +6,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from doxa.cli.commands import _load_file, dispatch
 from doxa.core.branch import Branch
 from doxa.persistence.repository import BranchRepository
 from doxa.query.engine import QueryEngine, QueryResult
-from doxa.cli.commands import dispatch, _load_file
 
 # Try to enable readline history/completion
 try:
@@ -40,8 +40,9 @@ class TerminalState:
 
 
 def _make_empty_branch() -> Branch:
-    from doxa.core.base_kinds import BaseKind
     from datetime import datetime, timezone
+
+    from doxa.core.base_kinds import BaseKind
 
     return Branch(
         kind=BaseKind.branch,

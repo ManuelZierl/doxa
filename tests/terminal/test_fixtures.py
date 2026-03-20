@@ -12,8 +12,8 @@ fixture requires only dropping two files in a new folder.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from io import StringIO
+from pathlib import Path
 
 import pytest
 

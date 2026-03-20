@@ -6,7 +6,6 @@ from pydantic import Field, field_validator
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 
-
 _UNQUOTED_RE = re.compile(r"^[A-Z_][A-Za-z0-9_]*$")
 
 

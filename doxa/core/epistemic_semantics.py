@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Tuple
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BodyTruthSemantics(str, Enum):

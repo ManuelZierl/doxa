@@ -1,16 +1,16 @@
 from unittest.mock import MagicMock, patch
 
 from doxa.cli.terminal import (
-    run_terminal,
     TerminalState,
-    _make_empty_branch,
+    _add_to_branch,
     _collect_statement,
     _handle_statement,
+    _make_empty_branch,
     _run_query,
-    _add_to_branch,
+    run_terminal,
 )
-from doxa.core.branch import Branch
 from doxa.core.base_kinds import BaseKind
+from doxa.core.branch import Branch
 
 
 def test_make_empty_branch() -> None:

@@ -4,21 +4,21 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Set
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from doxa.core._parsing.annotation_parser import parse_ax_annotation
+from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 from doxa.core.epistemic_semantics import (
-    EpistemicSemanticsConfig,
     DEFAULT_EPISTEMIC_SEMANTICS,
+    EpistemicSemanticsConfig,
 )
 from doxa.core.goal import (
     Goal,
     goal_from_doxa,
 )
 from doxa.core.schema_utils import compact_schema_for_llm
-from doxa.core._parsing.annotation_parser import parse_ax_annotation
-from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 
 
 class QueryFocus(str, Enum):

@@ -23,13 +23,13 @@ import click
 
 from doxa.__version__ import __version__
 from doxa.cli.compat import (
-    MEMORY_KINDS,
     ENGINE_KINDS,
+    MEMORY_KINDS,
     check_compat,
     default_engine_for,
 )
-from doxa.cli.prompt import extract_prompt_command, query_prompt_command
 from doxa.cli.merge import merge_command
+from doxa.cli.prompt import extract_prompt_command, query_prompt_command
 
 
 def _make_repo(memory_kind: str):
@@ -38,8 +38,9 @@ def _make_repo(memory_kind: str):
 
         return InMemoryBranchRepository()
     elif memory_kind == "postgres":
-        from doxa.persistence.postgres import PostgresBranchRepository
         import os
+
+        from doxa.persistence.postgres import PostgresBranchRepository
 
         db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
         return PostgresBranchRepository(db_url)
@@ -53,8 +54,9 @@ def _make_engine(engine_kind: str):
 
         return InMemoryQueryEngine()
     elif engine_kind == "postgres":
-        from doxa.query.postgres import PostgresQueryEngine
         import os
+
+        from doxa.query.postgres import PostgresQueryEngine
 
         db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
         return PostgresQueryEngine(db_url)
