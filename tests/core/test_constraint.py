@@ -255,7 +255,7 @@ def test_constraint_from_doxa_with_annotation() -> None:
     assert c.name == "no_self_ancestor"
     assert c.description == "integrity check"
     d = c.to_doxa()
-    assert d.startswith('!:- ancestor(X, X)')
+    assert d.startswith("!:- ancestor(X, X)")
     assert 'name:"no_self_ancestor"' in d
     assert 'description:"integrity check"' in d
 

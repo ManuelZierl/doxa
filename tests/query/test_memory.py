@@ -148,9 +148,9 @@ def test_closed_unsupported_query_returns_single_neither_answer():
 @pytest.mark.parametrize(
     ("fact_src", "expected_status", "expected_b", "expected_d"),
     [
-        ('p(a) @{b:1.0, d:0.0}.', BelnapStatus.true, 1.0, 0.0),
-        ('p(a) @{b:0.0, d:1.0}.', BelnapStatus.false, 0.0, 1.0),
-        ('p(a) @{b:0.7, d:0.2}.', BelnapStatus.both, 0.7, 0.2),
+        ("p(a) @{b:1.0, d:0.0}.", BelnapStatus.true, 1.0, 0.0),
+        ("p(a) @{b:0.0, d:1.0}.", BelnapStatus.false, 0.0, 1.0),
+        ("p(a) @{b:0.7, d:0.2}.", BelnapStatus.both, 0.7, 0.2),
     ],
 )
 def test_belnap_statuses_from_visible_evidence(
@@ -215,14 +215,14 @@ def test_record_visibility_respects_known_at_and_valid_interval():
 @pytest.mark.parametrize(
     ("query_ax", "expected_bindings"),
     [
-        ('?- eq(X, a)', {"X": "a"}),
-        ('?- add(2, 3, X)', {"X": 5}),
-        ('?- add(X, 3, 5)', {"X": 2}),
-        ('?- sub(7, X, 4)', {"X": 3}),
-        ('?- mul(3, 4, X)', {"X": 12}),
-        ('?- mul(X, 4, 12)', {"X": 3}),
-        ('?- div(8, 2, X)', {"X": 4}),
-        ('?- div(X, 2, 4)', {"X": 8}),
+        ("?- eq(X, a)", {"X": "a"}),
+        ("?- add(2, 3, X)", {"X": 5}),
+        ("?- add(X, 3, 5)", {"X": 2}),
+        ("?- sub(7, X, 4)", {"X": 3}),
+        ("?- mul(3, 4, X)", {"X": 12}),
+        ("?- mul(X, 4, 12)", {"X": 3}),
+        ("?- div(8, 2, X)", {"X": 4}),
+        ("?- div(X, 2, 4)", {"X": 8}),
     ],
 )
 def test_arithmetic_and_eq_builtins_bind_single_unknown(query_ax, expected_bindings):
@@ -256,10 +256,10 @@ def test_comparison_and_between_builtins_filter_rows():
 @pytest.mark.parametrize(
     ("query_ax", "expected_bindings"),
     [
-        ('?- eq(X, 3), int(X)', {"X": 3}),
-        ('?- eq(X, 3.5), float(X)', {"X": 3.5}),
+        ("?- eq(X, 3), int(X)", {"X": 3}),
+        ("?- eq(X, 3.5), float(X)", {"X": 3.5}),
         ('?- eq(X, "hi"), string(X)', {"X": "hi"}),
-        ('?- eq(X, alice), entity(X)', {"X": "alice"}),
+        ("?- eq(X, alice), entity(X)", {"X": "alice"}),
     ],
 )
 def test_type_builtins_accept_matching_values(query_ax, expected_bindings):

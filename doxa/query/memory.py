@@ -168,10 +168,12 @@ class ExplainCollector:
 # Core → internal compilation
 # ---------------------------------------------------------------------------
 
+
 def _strip_prefix(name: str, prefix: str) -> str:
     if name.startswith(prefix):
-        return name[len(prefix):]
+        return name[len(prefix) :]
     return name
+
 
 def _term(arg: Any) -> _Term:
     if hasattr(arg, "var"):
@@ -354,6 +356,7 @@ def _ground_atom_key(atom: _Atom, subst: Mapping[str, Any]) -> Optional[GroundAt
             return None
         values.append(value)
     return atom.pred, tuple(values)
+
 
 def _match_rule_head(
     head_terms: Tuple[_Term, ...],
@@ -804,7 +807,9 @@ def _positive_atom_truth_rows(
     for row in evidence_rows:
         if row.b > 0.0 or row.d > 0.0:
             grounded = _ground_atom_key(goal, row.subst)
-            atoms: Tuple[GroundAtomKey, ...] = (grounded,) if grounded is not None else ()
+            atoms: Tuple[GroundAtomKey, ...] = (
+                (grounded,) if grounded is not None else ()
+            )
             out.append(
                 _TruthRow(
                     subst=row.subst,
@@ -814,6 +819,7 @@ def _positive_atom_truth_rows(
                 )
             )
     return out
+
 
 def _constraint_violation_for_atoms(
     atoms: Tuple[GroundAtomKey, ...],
@@ -870,6 +876,7 @@ def _constraint_violation_for_atoms(
             violations.append(applicability * constraint.b)
 
     return _aggregate_values(violations, ctx.query)
+
 
 def _solve_body_truth(
     goals: Sequence[_Goal],
@@ -1003,6 +1010,7 @@ def _project_bindings(
     subst: Mapping[str, Any], vars_to_keep: Set[str]
 ) -> Dict[str, Any]:
     return {k: v for k, v in subst.items() if k in vars_to_keep}
+
 
 def _should_inline_assume_goal(
     goal: _Goal,
@@ -1282,7 +1290,7 @@ class InMemoryQueryEngine(QueryEngine):
                 fact_index=fact_index,
                 idb_preds=idb_preds,
                 query_vars=query_vars,
-                    ):
+            ):
                 from doxa.core.base_kinds import BaseKind
 
                 belief_args = []
@@ -1346,7 +1354,6 @@ class InMemoryQueryEngine(QueryEngine):
         collector = ExplainCollector(enabled=ctx.explain_enabled)
 
         answers: List[QueryAnswer]
-
 
         truth_rows = list(
             _solve_body_truth(

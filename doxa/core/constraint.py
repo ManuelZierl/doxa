@@ -74,9 +74,7 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
             escaped = self.description.replace("\\", "\\\\").replace('"', '\\"')
             parts.append(f'description:"{escaped}"')
 
-
         parts.append(f"b:{self.b}")
-
 
         parts.append(f"d:{self.d}")
 
