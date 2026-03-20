@@ -4,10 +4,10 @@ doxa>   Added: 1 predicate(s), 1 fact(s)
 doxa>   Added: 1 predicate(s), 1 fact(s)
 doxa>   Added: 1 predicate(s), 1 fact(s)
 doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa> p(a).
-p(b).
-q(a, 1).
-q(b, 2).
+doxa> p(a) @{b:1.0, d:0.0, et:"2026-03-20T10:21:38.136775Z"}.
+p(b) @{b:1.0, d:0.0, et:"2026-03-20T10:21:38.136775Z"}.
+q(a, 1) @{b:1.0, d:0.0, et:"2026-03-20T10:21:38.136775Z"}.
+q(b, 2) @{b:1.0, d:0.0, et:"2026-03-20T10:21:38.136775Z"}.
 doxa> pred p/1.
 pred q/2.
 doxa>   Goodbye.

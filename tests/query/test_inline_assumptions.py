@@ -37,9 +37,8 @@ subject_to_due_diligence(lksg, C, 2027) :-
     results = engine.evaluate(branch, query)
 
     # Should find results using the inline assumptions
-    assert results.success
-    assert len(results.bindings) == 2
-    years = {binding.values["Y"] for binding in results.bindings}
+    assert len(results.answers) == 2
+    years = {binding.bindings["Y"] for binding in results.answers}
     assert years == {2024, 2027}
 
 
@@ -67,9 +66,8 @@ subject_to_due_diligence(lksg, C, 2024) :-
     )
 
     results1 = engine.evaluate(branch, query1)
-    assert results1.success
-    assert len(results1.bindings) == 1
-    assert results1.bindings[0].values["Y"] == 2024
+    assert len(results1.answers) == 1
+    assert results1.answers[0].bindings["Y"] == 2024
 
     # Second query trying to look up the inline assumption
     # This should fail because the inline assumption was temporary
@@ -77,8 +75,7 @@ subject_to_due_diligence(lksg, C, 2024) :-
     results2 = engine.evaluate(branch, query2)
 
     # Should have no results - the inline assumption was not persisted
-    assert not results2.success
-    assert len(results2.bindings) == 0
+    assert len(results2.answers) == 0
 
     # Verify the branch itself was not modified
     assert len(branch.belief_records) == 0  # No facts were added
@@ -101,9 +98,8 @@ has_employee_count(company_b, 2000).
     results = engine.evaluate(branch, query)
 
     # Should find the two facts in the KB
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {binding.values["C"] for binding in results.bindings}
+    assert len(results.answers) == 2
+    companies = {binding.bindings["C"] for binding in results.answers}
     assert companies == {"company_a", "company_b"}
 
 
@@ -123,9 +119,8 @@ check_value(X, V) :- has_value(X, V), geq(V, 100).
     query = Query.from_doxa("?- has_value(item1, 150), check_value(item1, V)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 1
-    assert results.bindings[0].values["V"] == 150
+    assert len(results.answers) == 1
+    assert results.answers[0].bindings["V"] == 150
 
 
 def test_backward_compatibility():
@@ -144,9 +139,8 @@ subject_to_due_diligence(lksg, company_over_1000_employees, 2024).
     query = Query.from_doxa("?- subject_to_due_diligence(lksg, C, Year)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {binding.values["C"] for binding in results.bindings}
+    assert len(results.answers) == 2
+    companies = {binding.bindings["C"] for binding in results.answers}
     assert companies == {"company_over_3000_employees", "company_over_1000_employees"}
 
 
@@ -170,18 +164,17 @@ q(y, 20).
     results = engine.evaluate(branch, query)
 
     # Should get all combinations: 2 p facts × 2 q facts = 4 results
-    assert results.success
-    assert len(results.bindings) == 4
+    assert len(results.answers) == 4
 
     # Verify we get all combinations of X and Y
-    xy_pairs = {(b.values["X"], b.values["Y"]) for b in results.bindings}
+    xy_pairs = {(b.bindings["X"], b.bindings["Y"]) for b in results.answers}
     assert xy_pairs == {(1, 10), (1, 20), (2, 10), (2, 20)}
 
     # Verify that the anonymous variables are NOT projected into output
     # (bare _ is anonymous and should be hidden from user-facing results)
-    for binding in results.bindings:
-        assert "_0" not in binding.values
-        assert "_1" not in binding.values
+    for answer in results.answers:
+        assert "_0" not in answer.bindings
+        assert "_1" not in answer.bindings
 
 
 def test_variable_in_inline_assumptions_skolemized():
@@ -225,12 +218,10 @@ is_large_company(C) :-
     results_ent = engine.evaluate(branch, query_ent)
 
     # Both must succeed with the same number of results
-    assert results_ent.success
-    assert results_var.success
-    assert len(results_var.bindings) == len(results_ent.bindings)
+    assert len(results_var.answers) == len(results_ent.answers)
 
     # The variable query should bind C to the Skolem entity name
-    assert all("C" in b.values for b in results_var.bindings)
+    assert all("C" in b.bindings for b in results_var.answers)
 
 
 def test_skolemization_does_not_affect_pure_queries():
@@ -250,15 +241,13 @@ has_employee_count(company_b, 3000).
     query = Query.from_doxa("?- has_employee_count(C, E)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {b.values["C"] for b in results.bindings}
+    assert len(results.answers) == 2
+    companies = {b.bindings["C"] for b in results.answers}
     assert companies == {"company_a", "company_b"}
 
     # Single-variable lookup with one ground arg — still a query, not an assumption
     query2 = Query.from_doxa("?- has_employee_count(company_a, X)")
     results2 = engine.evaluate(branch, query2)
 
-    assert results2.success
-    assert len(results2.bindings) == 1
-    assert results2.bindings[0].values["X"] == 500
+    assert len(results2.answers) == 1
+    assert results2.answers[0].bindings["X"] == 500

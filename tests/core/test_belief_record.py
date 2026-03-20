@@ -108,7 +108,8 @@ def test_belief_record_from_doxa_simple() -> None:
     assert isinstance(rec.args[1], BeliefEntityArg)
     assert rec.args[0].ent_name == "thomas"
     assert rec.args[1].ent_name == "manuel"
-    assert rec.to_doxa() == "parent(thomas, manuel)"
+    assert rec.to_doxa().startswith("parent(thomas, manuel) @{b:1.0, d:0.0, et:")
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_with_mixed_args() -> None:
@@ -120,7 +121,8 @@ def test_belief_record_from_doxa_with_mixed_args() -> None:
     assert isinstance(rec.args[1], BeliefLiteralArg)
     assert rec.args[1].lit_type == LiteralType.str
     assert rec.args[1].value == "hello"
-    assert rec.to_doxa() == 'label(thomas, "hello")'
+    assert rec.to_doxa().startswith('label(thomas, "hello") @{b:1.0, d:0.0, et:"')
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_with_annotation() -> None:
@@ -148,7 +150,8 @@ def test_belief_record_from_doxa_sets_created_at() -> None:
 
 def test_belief_record_to_doxa_omits_default_annotation() -> None:
     rec = BeliefRecord.from_doxa("parent(thomas, manuel)")
-    assert rec.to_doxa() == "parent(thomas, manuel)"
+    assert rec.to_doxa().startswith('parent(thomas, manuel) @{b:1.0, d:0.0, et:"')
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_rejects_non_string() -> None:

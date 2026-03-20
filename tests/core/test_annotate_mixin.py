@@ -44,7 +44,7 @@ def test_from_doxa_annotation_empty_block_returns_defaults() -> None:
     assert ann.b == 1.0
     assert ann.d == 0.0
     assert ann.src is None
-    assert ann.et is None
+    assert ann.et is not None
     assert ann.vf is None
     assert ann.vt is None
     assert ann.name is None
@@ -197,7 +197,7 @@ def test_to_doxa_annotation_omits_none_fields() -> None:
     assert out.startswith("@{")
     assert out.endswith("}")
     assert "src:" not in out
-    assert "et:" not in out
+    assert "et:" in out
     assert "vf:" not in out
     assert "vt:" not in out
     assert "name:" not in out

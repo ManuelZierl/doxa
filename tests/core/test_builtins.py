@@ -22,8 +22,8 @@ def test_int_type_predicate_matches_integer():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 1
-    assert result.bindings[0].values["X"] == 42
+    assert len(result.answers) == 1
+    assert result.answers[0].bindings["X"] == 42
 
 
 def test_float_type_predicate_matches_float():
@@ -41,8 +41,8 @@ def test_float_type_predicate_matches_float():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 1
-    assert result.bindings[0].values["X"] == 1.5
+    assert len(result.answers) == 1
+    assert result.answers[0].bindings["X"] == 1.5
 
 
 def test_string_type_predicate_matches_string():
@@ -60,8 +60,8 @@ def test_string_type_predicate_matches_string():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 1
-    assert result.bindings[0].values["X"] == "hello"
+    assert len(result.answers) == 1
+    assert result.answers[0].bindings["X"] == "hello"
 
 
 def test_entity_type_predicate_matches_entities():
@@ -78,8 +78,8 @@ def test_entity_type_predicate_matches_entities():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 2
-    assert all(isinstance(b.values["X"], str) for b in result.bindings)
+    assert len(result.answers) == 2
+    assert all(isinstance(b.bindings["X"], str) for b in result.answers)
 
 
 def test_predicate_with_int_type_list():
@@ -102,7 +102,7 @@ def test_predicate_with_int_type_list():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 2
+    assert len(result.answers) == 2
 
 
 def test_predicate_with_mixed_types():
@@ -119,8 +119,8 @@ def test_predicate_with_mixed_types():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 2
-    assert result.bindings[0].values["V"] in [1, 2]
+    assert len(result.answers) == 2
+    assert result.answers[0].bindings["V"] in [1, 2]
 
 
 def test_predicate_without_type_list_defaults_to_entity():
@@ -189,8 +189,8 @@ def test_type_constraint_violation_with_int():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 1
-    assert result.bindings[0].values["X"] == 95
+    assert len(result.answers) == 1
+    assert result.answers[0].bindings["X"] == 95
 
 
 def test_int_type_rejects_float():
@@ -206,7 +206,7 @@ def test_int_type_rejects_float():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 0
+    assert len(result.answers) == 0
 
 
 def test_float_type_rejects_int():
@@ -222,7 +222,7 @@ def test_float_type_rejects_int():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 0
+    assert len(result.answers) == 0
 
 
 def test_string_type_rejects_entity():
@@ -240,7 +240,7 @@ def test_string_type_rejects_entity():
     result = engine.evaluate(branch, query)
 
     # Entity identifiers are strings, so this should match
-    assert len(result.bindings) == 1
+    assert len(result.answers) == 1
 
 
 def test_entity_type_matches_all_string_values():
@@ -259,7 +259,7 @@ def test_entity_type_matches_all_string_values():
     result = engine.evaluate(branch, query)
 
     # Should match alice and "hello" (both strings), but not 42
-    assert len(result.bindings) == 2
+    assert len(result.answers) == 2
 
 
 def test_type_predicates_cannot_be_redeclared():
@@ -304,7 +304,7 @@ def test_mixed_type_list_with_string_and_float():
     engine = InMemoryQueryEngine()
     result = engine.evaluate(branch, query)
 
-    assert len(result.bindings) == 1
-    assert result.bindings[0].values["X"] == "item1"
-    assert result.bindings[0].values["Y"] == "label"
-    assert result.bindings[0].values["Z"] == 3.14
+    assert len(result.answers) == 1
+    assert result.answers[0].bindings["X"] == "item1"
+    assert result.answers[0].bindings["Y"] == "label"
+    assert result.answers[0].bindings["Z"] == 3.14

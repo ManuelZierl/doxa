@@ -1,9 +1,9 @@
 pred employee/2 @{description:"Maps employee name to department"}.
 pred dept/1 @{description:"Known departments"}.
-employee(alice, engineering).
-employee(bob, marketing).
-dept(engineering).
-dept(marketing).
+employee(alice, engineering) @{b:1.0, d:0.0, et:"2026-03-20T10:18:29.953070Z"}.
+employee(bob, marketing) @{b:1.0, d:0.0, et:"2026-03-20T10:18:29.953070Z"}.
+dept(engineering) @{b:1.0, d:0.0, et:"2026-03-20T10:18:29.953070Z"}.
+dept(marketing) @{b:1.0, d:0.0, et:"2026-03-20T10:18:29.953070Z"}.
 /- dump
 /- search employee
 ?- employee(X, engineering).

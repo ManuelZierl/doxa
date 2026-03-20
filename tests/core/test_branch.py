@@ -86,9 +86,9 @@ def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
 
     out = branch.to_doxa()
 
-    assert "parent(thomas, manuel)." in out
-    assert "ancestor(X, Y) :- parent(X, Y)." in out
-    assert "!:- ancestor(X, X)." in out
+    assert "parent(thomas, manuel)" in out
+    assert "ancestor(X, Y) :- parent(X, Y)" in out
+    assert "!:- ancestor(X, X)" in out
 
 
 # todo: ...
@@ -176,7 +176,7 @@ def test_branch_from_doxa_handles_dot_inside_double_quoted_string() -> None:
     branch = Branch.from_doxa('label(thomas, "hello.world").')
 
     assert len(branch.belief_records) == 1
-    assert branch.belief_records[0].to_doxa() == 'label(thomas, "hello.world")'
+    assert branch.belief_records[0].to_doxa().startswith('label(thomas, "hello.world")')
 
 
 def test_branch_from_doxa_handles_multiple_lines_and_whitespace() -> None:
@@ -221,10 +221,10 @@ def test_branch_direct_model_construction() -> None:
 
 def test_branch_round_trip_preserves_statement_text() -> None:
     source = """
-    parent(thomas, manuel).
-    label(thomas, "hello.world").
-    ancestor(X, Y) :- parent(X, Y).
-    !:- ancestor(X, X).
+    parent(thomas, manuel) @{b:1.0, d:0.0, et:"2026-03-20T08:12:58.268915Z"}.
+    label(thomas, "hello.world") @{b:1.0, d:0.0, et:"2026-03-20T08:12:58.268915Z"}.
+    ancestor(X, Y) :- parent(X, Y)  @{b:1.0, d:0.0, et:"2026-03-20T08:13:21.598665Z"}.
+    !:- ancestor(X, X) @{et:"2026-03-20T08:13:35.468002Z"}.
     """
     reparsed = Branch.from_doxa(Branch.from_doxa(source).to_doxa())
 
