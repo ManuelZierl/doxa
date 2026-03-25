@@ -1,6 +1,0 @@
-doxa>   Added: 1 predicate(s)
-doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   1: {'X': 'alice'}
-  2: {'X': 'bob'}
-doxa>   Goodbye.

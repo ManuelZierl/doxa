@@ -13,12 +13,12 @@ from doxa.core.term_kinds import TermKind
 
 
 def test_belief_entity_arg_from_doxa() -> None:
-    arg = BeliefEntityArg.from_doxa("thomas")
+    arg = BeliefEntityArg.from_doxa("zeus")
 
     assert arg.kind == BaseKind.belief_arg
     assert arg.term_kind == TermKind.ent
-    assert arg.ent_name == "thomas"
-    assert arg.to_doxa() == "thomas"
+    assert arg.ent_name == "zeus"
+    assert arg.to_doxa() == "zeus"
 
 
 def test_belief_literal_arg_from_doxa_string() -> None:
@@ -73,9 +73,9 @@ def test_belief_literal_arg_rejects_wrong_type_for_float() -> None:
 
 
 def test_belief_arg_dispatch_entity() -> None:
-    arg = belief_arg_from_doxa("thomas")
+    arg = belief_arg_from_doxa("zeus")
     assert isinstance(arg, BeliefEntityArg)
-    assert arg.ent_name == "thomas"
+    assert arg.ent_name == "zeus"
 
 
 def test_belief_arg_dispatch_literal_string() -> None:
@@ -98,7 +98,7 @@ def test_belief_arg_dispatch_rejects_invalid_input() -> None:
 
 
 def test_belief_record_from_doxa_simple() -> None:
-    rec = BeliefRecord.from_doxa("parent(thomas, manuel)")
+    rec = BeliefRecord.from_doxa("parent(zeus, heracles)")
 
     assert rec.kind == BaseKind.belief_record
     assert rec.pred_name == "parent"
@@ -106,13 +106,14 @@ def test_belief_record_from_doxa_simple() -> None:
     assert len(rec.args) == 2
     assert isinstance(rec.args[0], BeliefEntityArg)
     assert isinstance(rec.args[1], BeliefEntityArg)
-    assert rec.args[0].ent_name == "thomas"
-    assert rec.args[1].ent_name == "manuel"
-    assert rec.to_doxa() == "parent(thomas, manuel)"
+    assert rec.args[0].ent_name == "zeus"
+    assert rec.args[1].ent_name == "heracles"
+    assert rec.to_doxa().startswith("parent(zeus, heracles) @{b:1.0, d:0.0, et:")
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_with_mixed_args() -> None:
-    rec = BeliefRecord.from_doxa('label(thomas, "hello")')
+    rec = BeliefRecord.from_doxa('label(zeus, "hello")')
 
     assert rec.pred_name == "label"
     assert rec.pred_arity == 2
@@ -120,19 +121,20 @@ def test_belief_record_from_doxa_with_mixed_args() -> None:
     assert isinstance(rec.args[1], BeliefLiteralArg)
     assert rec.args[1].lit_type == LiteralType.str
     assert rec.args[1].value == "hello"
-    assert rec.to_doxa() == 'label(thomas, "hello")'
+    assert rec.to_doxa().startswith('label(zeus, "hello") @{b:1.0, d:0.0, et:"')
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_with_annotation() -> None:
     rec = BeliefRecord.from_doxa(
-        'parent(thomas, manuel) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}'
+        'parent(zeus, heracles) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}'
     )
 
     assert rec.name == "registry_fact"
     assert rec.description == "from registry"
     assert rec.b == 0.9
     assert rec.d == 0.01
-    assert rec.to_doxa().strip("parent(thomas, manuel)")
+    assert rec.to_doxa().strip("parent(zeus, heracles)")
     assert "@{" in rec.to_doxa()
     assert rec.to_doxa().endswith("}")
     assert 'name:"registry_fact"' in rec.to_doxa()
@@ -142,13 +144,14 @@ def test_belief_record_from_doxa_with_annotation() -> None:
 
 
 def test_belief_record_from_doxa_sets_created_at() -> None:
-    rec = BeliefRecord.from_doxa("parent(thomas, manuel)")
+    rec = BeliefRecord.from_doxa("parent(zeus, heracles)")
     assert rec.created_at is not None
 
 
 def test_belief_record_to_doxa_omits_default_annotation() -> None:
-    rec = BeliefRecord.from_doxa("parent(thomas, manuel)")
-    assert rec.to_doxa() == "parent(thomas, manuel)"
+    rec = BeliefRecord.from_doxa("parent(zeus, heracles)")
+    assert rec.to_doxa().startswith('parent(zeus, heracles) @{b:1.0, d:0.0, et:"')
+    assert rec.to_doxa().endswith('"}')
 
 
 def test_belief_record_from_doxa_rejects_non_string() -> None:
@@ -167,9 +170,9 @@ def test_belief_record_from_doxa_rejects_empty_input() -> None:
         "parent",
         "parent(",
         "parent)",
-        "parent thomas, manuel",
-        "Parent(thomas, manuel)",
-        "9parent(thomas, manuel)",
+        "parent zeus, heracles",
+        "Parent(zeus, heracles)",
+        "9parent(zeus, heracles)",
     ],
 )
 def test_belief_record_from_doxa_rejects_invalid_syntax(inp: str) -> None:
@@ -181,15 +184,15 @@ def test_belief_record_validate_arity_rejects_wrong_arg_count() -> None:
     with pytest.raises(ValidationError):
         BeliefRecord(
             kind=BaseKind.belief_record,
-            created_at=BeliefRecord.from_doxa("parent(thomas, manuel)").created_at,
+            created_at=BeliefRecord.from_doxa("parent(zeus, heracles)").created_at,
             pred_name="parent",
             pred_arity=2,
-            args=[BeliefEntityArg.from_doxa("thomas")],
+            args=[BeliefEntityArg.from_doxa("zeus")],
         )
 
 
 def test_belief_record_round_trip_simple() -> None:
-    original = BeliefRecord.from_doxa("parent(thomas, manuel)")
+    original = BeliefRecord.from_doxa("parent(zeus, heracles)")
     reparsed = BeliefRecord.from_doxa(original.to_doxa())
 
     assert reparsed.to_doxa() == original.to_doxa()
@@ -200,7 +203,7 @@ def test_belief_record_round_trip_simple() -> None:
 
 def test_belief_record_round_trip_with_annotation() -> None:
     original = BeliefRecord.from_doxa(
-        'parent(thomas, manuel) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}'
+        'parent(zeus, heracles) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}'
     )
     reparsed = BeliefRecord.from_doxa(original.to_doxa())
 
@@ -215,7 +218,7 @@ def test_belief_record_round_trip_with_annotation() -> None:
 
 
 def test_belief_record_string_literal_round_trip() -> None:
-    original = BeliefRecord.from_doxa('label(thomas, "hello world")')
+    original = BeliefRecord.from_doxa('label(zeus, "hello world")')
     reparsed = BeliefRecord.from_doxa(original.to_doxa())
 
     assert reparsed.to_doxa() == original.to_doxa()
@@ -223,7 +226,7 @@ def test_belief_record_string_literal_round_trip() -> None:
 
 
 def test_belief_record_bool_literal_round_trip() -> None:
-    original = BeliefRecord.from_doxa("active(thomas, true)")
+    original = BeliefRecord.from_doxa("active(zeus, true)")
     reparsed = BeliefRecord.from_doxa(original.to_doxa())
 
     assert reparsed.to_doxa() == original.to_doxa()

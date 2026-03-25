@@ -1,0 +1,14 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: S=80, X='alice' | b=1, d=0, status=true
+  2: S=90, X='carol' | b=1, d=0, status=true
+doxa>   1: S=60, X='bob' | b=1, d=0, status=true
+doxa>   1: S=80, X='alice' | b=1, d=0, status=true
+  2: S=90, X='carol' | b=1, d=0, status=true
+doxa>   1: S=80, X='alice' | b=1, d=0, status=true
+  2: S=60, X='bob' | b=1, d=0, status=true
+doxa>   1: S=60, X='bob' | b=1, d=0, status=true
+  2: S=90, X='carol' | b=1, d=0, status=true
+doxa>   Goodbye.

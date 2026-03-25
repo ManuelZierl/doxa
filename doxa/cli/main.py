@@ -22,14 +22,9 @@ from pathlib import Path
 import click
 
 from doxa.__version__ import __version__
-from doxa.cli.compat import (
-    MEMORY_KINDS,
-    ENGINE_KINDS,
-    check_compat,
-    default_engine_for,
-)
-from doxa.cli.prompt import extract_prompt_command, query_prompt_command
+from doxa.cli.compat import ENGINE_KINDS, MEMORY_KINDS, check_compat, default_engine_for
 from doxa.cli.merge import merge_command
+from doxa.cli.prompt import extract_prompt_command, query_prompt_command
 
 
 def _make_repo(memory_kind: str):
@@ -38,8 +33,9 @@ def _make_repo(memory_kind: str):
 
         return InMemoryBranchRepository()
     elif memory_kind == "postgres":
-        from doxa.persistence.postgres import PostgresBranchRepository
         import os
+
+        from doxa.persistence.postgres import PostgresBranchRepository
 
         db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
         return PostgresBranchRepository(db_url)
@@ -47,17 +43,20 @@ def _make_repo(memory_kind: str):
         raise click.ClickException(f"Unknown memory backend: {memory_kind!r}")
 
 
-def _make_engine(engine_kind: str):
+def _make_engine(engine_kind: str, repo=None):
     if engine_kind == "memory":
         from doxa.query.memory import InMemoryQueryEngine
 
         return InMemoryQueryEngine()
     elif engine_kind == "postgres":
         from doxa.query.postgres import PostgresQueryEngine
-        import os
 
-        db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
-        return PostgresQueryEngine(db_url)
+        if repo is None:
+            raise click.ClickException(
+                "PostgresQueryEngine requires a PostgresBranchRepository. "
+                "Use --memory postgres to create one automatically."
+            )
+        return PostgresQueryEngine(repo)
     else:
         raise click.ClickException(f"Unknown query engine: {engine_kind!r}")
 
@@ -142,7 +141,7 @@ def cli(
         raise click.ClickException(f"Could not initialize memory backend: {exc}")
 
     try:
-        engine = _make_engine(engine_kind)
+        engine = _make_engine(engine_kind, repo=repo)
     except NotImplementedError:
         raise click.ClickException(
             f"Query engine {engine_kind!r} is not yet implemented."

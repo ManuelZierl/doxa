@@ -1,0 +1,7 @@
+fly(bear).
+fly(owl).
+!:- fly(bear).
+animal(X) :- fly(X).
+?- fly(X).
+?- animal(X).
+/-exit

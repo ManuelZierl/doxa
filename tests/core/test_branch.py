@@ -1,14 +1,14 @@
 import pytest
 
 from doxa.core.base_kinds import BaseKind
-from doxa.core.branch import Branch
 from doxa.core.belief_record import BeliefRecord
+from doxa.core.branch import Branch
 from doxa.core.constraint import Constraint
 from doxa.core.rule import Rule
 
 
 def test_branch_from_doxa_parses_single_belief_record() -> None:
-    branch = Branch.from_doxa("parent(thomas, manuel).")
+    branch = Branch.from_doxa("parent(zeus, heracles).")
 
     assert branch.kind == BaseKind.branch
     assert branch.name == "main"
@@ -42,7 +42,7 @@ def test_branch_from_doxa_parses_mixed_statements_in_any_order() -> None:
     branch = Branch.from_doxa(
         """
         !:- ancestor(X, X).
-        parent(thomas, manuel).
+        parent(zeus, heracles).
         ancestor(X, Y) :- parent(X, Y).
         """
     )
@@ -61,8 +61,8 @@ def test_branch_from_doxa_parses_multiple_belief_records_rules_and_constraints()
 ):
     branch = Branch.from_doxa(
         """
-        parent(thomas, manuel).
-        parent(manuel, anna).
+        parent(zeus, heracles).
+        parent(heracles, anna).
         ancestor(X, Y) :- parent(X, Y).
         ancestor(X, Y) :- parent(X, Z), ancestor(Z, Y).
         !:- ancestor(X, X).
@@ -78,7 +78,7 @@ def test_branch_from_doxa_parses_multiple_belief_records_rules_and_constraints()
 def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
     branch = Branch.from_doxa(
         """
-        parent(thomas, manuel).
+        parent(zeus, heracles).
         ancestor(X, Y) :- parent(X, Y).
         !:- ancestor(X, X).
         """
@@ -86,9 +86,9 @@ def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
 
     out = branch.to_doxa()
 
-    assert "parent(thomas, manuel)." in out
-    assert "ancestor(X, Y) :- parent(X, Y)." in out
-    assert "!:- ancestor(X, X)." in out
+    assert "parent(zeus, heracles)" in out
+    assert "ancestor(X, Y) :- parent(X, Y)" in out
+    assert "!:- ancestor(X, X)" in out
 
 
 # todo: ...
@@ -96,7 +96,7 @@ def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
 #     branch = Branch.from_doxa(
 #         """
 #         !:- ancestor(X, X).
-#         parent(thomas, manuel).
+#         parent(zeus, heracles).
 #         ancestor(X, Y) :- parent(X, Y).
 #         """
 #     )
@@ -104,7 +104,7 @@ def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
 #     out = branch.to_doxa().splitlines()
 #
 #     assert out == [
-#         "parent(thomas, manuel).",
+#         "parent(zeus, heracles).",
 #         "ancestor(X, Y) :- parent(X, Y).",
 #         "!:- ancestor(X, X).",
 #     ]
@@ -113,7 +113,7 @@ def test_branch_to_doxa_serializes_all_statements_with_dots() -> None:
 def test_branch_round_trip_simple_program() -> None:
     original = Branch.from_doxa(
         """
-        parent(thomas, manuel).
+        parent(zeus, heracles).
         ancestor(X, Y) :- parent(X, Y).
         !:- ancestor(X, X).
         """
@@ -129,7 +129,7 @@ def test_branch_round_trip_simple_program() -> None:
 def test_branch_round_trip_with_annotations() -> None:
     original = Branch.from_doxa(
         """
-        parent(thomas, manuel) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}.
+        parent(zeus, heracles) @{name:"registry_fact", description:"from registry", b:0.9, d:0.01}.
         ancestor(X, Y) :- parent(X, Y) @{name:"seed_rule", description:"seed"}.
         !:- ancestor(X, X) @{name:"no_self_ancestor", description:"integrity check"}.
         """
@@ -154,36 +154,36 @@ def test_branch_from_doxa_rejects_empty_input() -> None:
 
 def test_branch_from_doxa_rejects_missing_statement_terminator() -> None:
     with pytest.raises(ValueError, match="must terminate each statement with"):
-        Branch.from_doxa("parent(thomas, manuel)")
+        Branch.from_doxa("parent(zeus, heracles)")
 
 
 def test_branch_from_doxa_rejects_empty_statement_between_dots() -> None:
     with pytest.raises(ValueError, match="Empty AX statement"):
-        Branch.from_doxa("parent(thomas, manuel)..")
+        Branch.from_doxa("parent(zeus, heracles)..")
 
 
 def test_branch_from_doxa_rejects_unbalanced_parentheses() -> None:
     with pytest.raises(ValueError, match="Unbalanced parentheses"):
-        Branch.from_doxa("parent(thomas, manuel. ")
+        Branch.from_doxa("parent(zeus, heracles. ")
 
 
 def test_branch_from_doxa_rejects_unterminated_quoted_string() -> None:
     with pytest.raises(ValueError, match="Unterminated quoted string"):
-        Branch.from_doxa('label(thomas, "hello).')
+        Branch.from_doxa('label(zeus, "hello).')
 
 
 def test_branch_from_doxa_handles_dot_inside_double_quoted_string() -> None:
-    branch = Branch.from_doxa('label(thomas, "hello.world").')
+    branch = Branch.from_doxa('label(zeus, "hello.world").')
 
     assert len(branch.belief_records) == 1
-    assert branch.belief_records[0].to_doxa() == 'label(thomas, "hello.world")'
+    assert branch.belief_records[0].to_doxa().startswith('label(zeus, "hello.world")')
 
 
 def test_branch_from_doxa_handles_multiple_lines_and_whitespace() -> None:
     branch = Branch.from_doxa(
         """
 
-            parent(thomas, manuel).
+            parent(zeus, heracles).
 
             ancestor(X, Y) :- parent(X, Y).
 
@@ -198,7 +198,7 @@ def test_branch_from_doxa_handles_multiple_lines_and_whitespace() -> None:
 
 
 def test_branch_direct_model_construction() -> None:
-    belief = BeliefRecord.from_doxa("parent(thomas, manuel)")
+    belief = BeliefRecord.from_doxa("parent(zeus, heracles)")
     rule = Rule.from_doxa("ancestor(X, Y) :- parent(X, Y)")
     constraint = Constraint.from_doxa("!:- ancestor(X, X)")
 
@@ -221,10 +221,10 @@ def test_branch_direct_model_construction() -> None:
 
 def test_branch_round_trip_preserves_statement_text() -> None:
     source = """
-    parent(thomas, manuel).
-    label(thomas, "hello.world").
-    ancestor(X, Y) :- parent(X, Y).
-    !:- ancestor(X, X).
+    parent(zeus, heracles) @{b:1.0, d:0.0, et:"2026-03-20T08:12:58.268915Z"}.
+    label(zeus, "hello.world") @{b:1.0, d:0.0, et:"2026-03-20T08:12:58.268915Z"}.
+    ancestor(X, Y) :- parent(X, Y)  @{b:1.0, d:0.0, et:"2026-03-20T08:13:21.598665Z"}.
+    !:- ancestor(X, X) @{et:"2026-03-20T08:13:35.468002Z"}.
     """
     reparsed = Branch.from_doxa(Branch.from_doxa(source).to_doxa())
 

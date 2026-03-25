@@ -1,84 +1,103 @@
-# Doxa Language Specification — v0.1
+# Doxa Language Specification - v0.2
 
 Doxa is a Prolog/Datalog-inspired knowledge language with epistemic annotations.
-A Doxa program is a sequence of statements; each statement ends with `.`
 
----
+A stored Doxa program is a sequence of predicate declarations, facts, rules, and constraints. These statements end with `.`. Queries are issued separately against a branch.
 
 ## Lexical Conventions
 
-```
+```doxa
 % line comment
-/* block comment */
 ```
 
-| Token          | Form                            | Examples                     |
-|----------------|---------------------------------|------------------------------|
-| Variable       | Uppercase or `_`-prefix         | `X`, `Person`, `_Tmp`        |
-| Identifier     | Lowercase start, `[a-zA-Z0-9_]` | `parent`, `alice`, `my_pred` |
-| Quoted atom    | Single quotes                   | `'Thomas'`, `'Lama glama'`   |
-| String literal | Double quotes                   | `"hello world"`              |
-| Integer        | Plain digits                    | `42`, `-3`                   |
-| Float          | Digits with `.`                 | `1.5`, `3.14`                |
+Lines whose trimmed text starts with `%` are ignored.
 
-Identifiers and predicate names must be **ASCII only**.
-String literal *values* may contain Unicode.
-**Compound terms are forbidden** — `foo(bar(X))` is a syntax error; introduce a fresh entity instead.
+| Token          | Form                                                 | Examples                     |
+|----------------|------------------------------------------------------|------------------------------|
+| Variable       | Uppercase or `_`-prefix                              | `X`, `Person`, `_Tmp`        |
+| Identifier     | Lowercase start, followed by letters, digits, or `_` | `parent`, `alice`, `my_pred` |
+| Quoted entity  | Single quotes                                        | `'Thomas'`, `'Lama glama'`   |
+| String literal | Double quotes                                        | `"hello world"`              |
+| Integer        | Plain digits, optionally signed                      | `42`, `-3`                   |
+| Float          | Digits with `.`                                      | `1.5`, `3.14`                |
 
----
+Predicate names use the identifier form above.
+
+String literal values may contain Unicode.
+
+Compound terms are forbidden. For example, `foo(bar(X))` is a syntax error; introduce a fresh entity instead.
 
 ## Statements
 
 ### 1. Predicate Declaration
 
-```
+```doxa
 pred name/arity [type_list] [@{description:"..."}].
 ```
 
-Must appear before the first use of the predicate.
-The optional `[type_list]` specifies argument types and automatically generates type-checking constraints.
-`description` is the **only** annotation key accepted on `pred` — any other key is a hard error.
+Examples:
 
 ```doxa
 pred parent/2 @{description:"parent(P,C): P is a direct parent of C"}.
 pred alive/1.
 pred employee/2 [company, person] @{description:"employee(C,P): P works for company C"}.
+pred euro_value/2 [entity, int].
 ```
 
-When a type list is provided, Doxa automatically generates type-checking constraints. Type-checking is always done with predicates of arity 1.
+Rules:
+
+* `description` is the only annotation key accepted on `pred`. Any other annotation key is a hard error.
+* `arity` must be at least 1.
+* If a `type_list` is provided, its length must match the predicate arity.
+* Each `type_list` entry names a unary predicate used for generated type-checking constraints.
+* Common built-in choices are `entity`, `int`, `float`, and `string`.
+* If `type_list` is omitted, it is treated as an all-`entity` list for parsing and serialization.
+* That default does not add generated type-checking constraints, because built-in type predicates such as `entity` are checked at runtime rather than through generated constraints.
+
+Example expansion:
+
 ```doxa
 pred employee/2 [company, person].
 ```
-Expands to:
+
+Expands to generated constraints equivalent to:
+
 ```doxa
 pred employee/2.
 !:- employee(X0, X1), not company(X0).
 !:- employee(X0, X1), not person(X1).
 ```
 
+Current parser behavior:
+
+* Predicate declarations are recommended for schema and documentation.
+* The current parser also accepts undeclared predicate usage and auto-creates predicates as statements are parsed.
+
 ### 2. Fact (BeliefRecord)
 
-Asserts a ground atom. All arguments must be bound (no variables).
+A fact asserts a ground atom. All arguments must already be ground; variables are not allowed in facts.
 
-```
+```doxa
 name(arg1, ..., argN) [@{annotation-keys}].
 ```
 
+Examples:
+
 ```doxa
-parent(thomas, alice) @{b:0.99, d:0.0, src:registry, et:"2026-01-01T00:00:00Z"}.
+parent(zeus, alice) @{b:0.99, d:0.0, src:registry, et:"2026-01-01T00:00:00Z"}.
 name(alice, "Alice Smith") @{src:registry, et:"2026-01-01T00:00:00Z"}.
-price(apple, 1.5) @{vf:"2026-01-01", vt:"2026-12-31"}.
+price(apple, 1.5) @{vf:"2026-01-01T00:00:00Z", vt:"2026-12-31T00:00:00Z"}.
 ```
 
 ### 3. Rule
 
-Derives the head atom when all body goals hold. `not` (negation as failure) is allowed in the body.
-Builtin goals cannot be negated.
-Multiple rules with the same head are implicitly unioned.
+A rule derives the head atom when all body goals hold. `not` (negation as failure) is allowed in the body. Builtin goals cannot be negated.
 
-```
+```doxa
 head(args) :- goal1, goal2, ... [@{annotation-keys}].
 ```
+
+Examples:
 
 ```doxa
 ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
@@ -90,13 +109,17 @@ unemployed(X) :- person(X), not employed(X), not student(X)
       description:"unemployed(X): not employed and not a student"}.
 ```
 
+Multiple rules with the same head predicate contribute support to the same derived answers.
+
 ### 4. Constraint
 
-Emits a violation when the body is satisfiable. Does not derive new facts.
+A constraint emits a violation when its body is satisfiable. It does not derive new facts.
 
-```
+```doxa
 !:- goal1, goal2, ... [@{annotation-keys}].
 ```
+
+Example:
 
 ```doxa
 !:- approved(X), not registered(X) @{name:"approved_must_be_registered"}.
@@ -104,210 +127,280 @@ Emits a violation when the body is satisfiable. Does not derive new facts.
 
 ### 5. Query
 
-Retrieves bindings satisfying the body goals.
-
-```
-?- goal1, goal2, ... [@{query-options}].
-```
+Queries retrieve epistemic answer rows for bindings satisfying the body goals.
 
 ```doxa
-?- ancestor(thomas, X).
-?- score(X, S), geq(S, 80) @{order_by:"S", distinct:true, limit:10}.
-?- event(X) @{asof:"2024-06-15"}.
+?- goal1, goal2, ... [@{query-options}]
 ```
 
----
+Examples:
+
+```doxa
+?- ancestor(zeus, X)
+?- score(X, S), geq(S, 80) @{order_by:"S", limit:10}
+?- event(X) @{valid_at:"2024-06-15T00:00:00Z"}
+?- person(X) @{focus:"support"}
+```
+
+A query answer contains:
+
+* projected variable bindings
+* answer-level `b`
+* answer-level `d`
+* a derived Belnap status
+
+### Hypothetical Assumptions (`assume`)
+
+The `assume(...)` goal is query-only syntax that injects temporary facts into the evaluation context for the duration of that query. Assumed facts are not persisted to the branch.
+
+```doxa
+?- assume(fact1, fact2, ...), goal1, goal2, ...
+```
+
+Examples:
+
+```doxa
+?- assume(employees(nordwind, 450), company(nordwind), turnover_mio(nordwind, 55)),
+   out_of_scope_under_current_csrd(nordwind).
+
+?- assume(has_employee_count(my_company, 1200), has_net_turnover(my_company, 500000000)),
+   subject_to_due_diligence(lksg, my_company, Year).
+```
+
+Rules:
+
+* `assume(...)` is valid only in queries, not in rules, constraints, or `.doxa` files.
+* Each argument inside `assume(...)` must be a valid atom goal (same syntax as a fact).
+* Assumed facts are injected with `b=1.0, d=0.0` before the rest of the query is evaluated.
+* Assumed facts are temporary and do not modify the branch or persist after query evaluation.
+* `assume(...)` works identically for ground and open queries.
+* Variables inside `assume(...)` that remain unbound are silently skipped (the assumption is incomplete and cannot be injected).
+* Multiple `assume(...)` goals in the same query are allowed; all are injected before solving begins.
 
 ## Annotation Keys
 
-Facts, rules, and constraints all accept the same set of annotation keys (all optional):
+Facts, rules, and constraints all accept the same annotation keys.
 
-| Key           | Type            | Default | Meaning                                   |
-|---------------|-----------------|---------|-------------------------------------------|
-| `b`           | float [0,1]     | 1.0     | Belief degree                             |
-| `d`           | float [0,1]     | 0.0     | Disbelief degree                          |
-| `src`         | identifier      | —       | Source entity id                          |
-| `et`          | ISO-8601 string | —       | Epistemic time                            |
-| `vf`          | ISO-8601 string | —       | Valid-from                                |
-| `vt`          | ISO-8601 string | —       | Valid-to                                  |
-| `name`        | string          | —       | Label                                     |
-| `description` | string          | —       | Description (`note` is an accepted alias) |
+| Key           | Type                     |                                        Default | Meaning           |
+|---------------|--------------------------|-----------------------------------------------:|-------------------|
+| `b`           | float in `[0,1]`         |                                          `1.0` | Belief degree     |
+| `d`           | float in `[0,1]`         |                                          `0.0` | Disbelief degree  |
+| `src`         | identifier or string     |                                           none | Source identifier |
+| `et`          | ISO-8601 datetime string | current UTC evaluation time                    | Epistemic time    |
+| `vf`          | ISO-8601 datetime string |                                           none | Valid-from        |
+| `vt`          | ISO-8601 datetime string |                                           none | Valid-to          |
+| `name`        | string                   |                                           none | Label             |
+| `description` | string                   |                                           none | Description       |
 
-`pred` declarations accept **only** `description`. All other keys cause a hard error.
+Notes:
 
----
+* `note` is accepted as an alias for `description`.
+* `pred` declarations accept only `description`. All other annotation keys cause a hard error.
+* `vf` and `vt` are parsed as datetimes.
 
 ## Body Goals
 
-A body is a comma-separated list of goals. Each goal is one of:
+A body is a comma-separated list of goals. Each goal is one of the following.
 
-### Atom goal
-```
+### Atom Goal
+
+```doxa
 predicate_name(term1, ..., termN)
 ```
 
-### Proof-level Operators
+### Negation as Failure (`not`)
 
-#### Negation as Failure (`not`)
-```
+```doxa
 not predicate_name(term1, ..., termN)
 ```
 
-`not` is a **proof-level operator**, not a builtin predicate. It implements negation-as-failure (NAF): `not goal` succeeds if and only if `goal` cannot be proven. This is fundamentally different from boolean negation.
+`not` is a proof-level operator, not a builtin predicate.
 
-**Important distinctions:**
-- `not` is a reserved operator that modifies atom goals
-- `not` cannot be applied to builtin goals
-- `not` does not bind new variables — all variables in a negated goal must already be bound
-- `not` operates at the proof search level, not on boolean values
+Rules:
 
-### Builtins
+* `not` may be applied only to atom goals
+* builtin goals cannot be negated
+* variables in a negated goal must already be bound
+* `not` operates on provability, not on boolean values
 
-Builtins are special predicates evaluated directly by the query engine, not through rule derivation.
+## Builtins
 
-#### Built-in: comparators (arity 2)
+Builtins are evaluated directly by the query engine.
 
-Both arguments must be bound, except `eq` which can unify one unbound variable.
+### Comparators (arity 2)
 
-| Builtin     | Meaning |
-|-------------|---------|
-| `eq(A, B)`  | A = B   |
-| `ne(A, B)`  | A ≠ B   |
-| `lt(A, B)`  | A < B   |
-| `leq(A, B)` | A ≤ B   |
-| `gt(A, B)`  | A > B   |
-| `geq(A, B)` | A ≥ B   |
+Both arguments must be bound, except `eq`, which can bind one unbound variable.
 
-### Built-in: arithmetic (arity 3)
+| Builtin     | Meaning                |
+| ----------- | ---------------------- |
+| `eq(A, B)`  | equality / unification |
+| `ne(A, B)`  | inequality             |
+| `lt(A, B)`  | less than              |
+| `leq(A, B)` | less than or equal     |
+| `gt(A, B)`  | greater than           |
+| `geq(A, B)` | greater than or equal  |
 
-Solves for any one unknown argument.
+### Arithmetic (arity 3)
 
-| Builtin              | Meaning                                                           |
-|----------------------|-------------------------------------------------------------------|
-| `add(A, B, C)`       | A + B = C                                                         |
-| `sub(A, B, C)`       | A − B = C                                                         |
-| `mul(A, B, C)`       | A × B = C                                                         |
-| `div(A, B, C)`       | A / B = C                                                         |
-| `between(X, Lo, Hi)` | Lo ≤ X ≤ Hi — all three must be bound; check only, no enumeration |
+Arithmetic builtins solve for any one unknown argument.
 
-### Built-in: type predicates (arity 1)
+| Builtin              | Meaning                                                |
+| -------------------- | ------------------------------------------------------ |
+| `add(A, B, C)`       | `A + B = C`                                            |
+| `sub(A, B, C)`       | `A - B = C`                                            |
+| `mul(A, B, C)`       | `A * B = C`                                            |
+| `div(A, B, C)`       | `A / B = C`                                            |
+| `between(X, Lo, Hi)` | range check; all three arguments must already be bound |
 
-Type predicates check the runtime type of their argument. The argument must be bound.
+`between` is a check only. It does not enumerate values.
 
-| Builtin      | Meaning                                          |
-|--------------|--------------------------------------------------|
-| `int(X)`     | X is an integer value                            |
-| `float(X)`   | X is a floating-point value                      |
-| `string(X)`  | X is a string literal value                      |
-| `entity(X)`  | X is an entity (any string identifier)           |
+### Built-in Type Predicates (arity 1)
 
-**Type predicates in predicate declarations:**
+These builtins check runtime value kinds.
 
-Type predicates can be used in predicate type lists to automatically generate type-checking constraints:
+| Builtin     | Meaning                        |
+| ----------- | ------------------------------ |
+| `int(X)`    | `X` is an integer              |
+| `float(X)`  | `X` is a floating-point number |
+| `string(X)` | `X` is a string literal        |
+| `entity(X)` | `X` is an entity identifier    |
 
-```doxa
-pred euro_value/2 [entity, int].
-```
+These names may be used in predicate `type_list` declarations.
 
-This automatically generates:
-```doxa
-!:- euro_value(X0, X1), not entity(X0).
-!:- euro_value(X0, X1), not int(X1).
-```
-
-**Default type annotation:**
-
-When a predicate is declared without a type list, it automatically defaults to `[entity, entity, ...]` for all argument positions:
-
-```doxa
-pred parent/2.
-```
-
-is equivalent to:
-
-```doxa
-pred parent/2 [entity, entity].
-```
-
-Infix operators (`>=`, `<`, etc.) are **not valid syntax** in rule bodies or queries.
-
----
+Infix operators such as `>=` or `<` are not part of the documented Doxa surface syntax. Use builtin forms such as `geq(A, B)` and `lt(A, B)`.
 
 ## Query Options
 
-Specified in the query annotation `@{...}`:
+Query options are specified in the query annotation `@{...}`.
+Unknown query-option keys are rejected.
 
-| Option      | Type            | Default    | Meaning                                                        |
-|-------------|-----------------|------------|----------------------------------------------------------------|
-| `limit`     | int ≥ 0         | —          | Return at most N results                                       |
-| `offset`    | int ≥ 0         | 0          | Skip first N results                                           |
-| `order_by`  | string          | —          | Comma-separated variable names to sort by                      |
-| `distinct`  | bool            | false      | Deduplicate result rows                                        |
-| `asof`      | ISO-8601 string | —          | Filter facts to those whose `[vf, vt]` window covers this time |
-| `max_depth` | int > 0         | 24         | Hard cap on recursive rule-application depth                   |
-| `policy`    | string          | `"report"` | Evidence filter — see below                                    |
-| `explain`   | string          | `"false"`  | Derivation trace: `"false"`, `"true"`, or `"human"`            |
+| Option       | Type                              |                     Default | Meaning                                         |
+| ------------ | --------------------------------- | --------------------------: | ----------------------------------------------- |
+| `query_time` | ISO-8601 datetime string          | current UTC evaluation time | Default time anchor for omitted time cutoffs    |
+| `valid_at`   | ISO-8601 datetime string          |                `query_time` | Validity-time cutoff applied to `[vf, vt]`      |
+| `known_at`   | ISO-8601 datetime string          |                `query_time` | Knowledge-time cutoff applied to `et`           |
+| `epistemic_semantics` | object via Python API              | engine default semantics config | Per-query semantics override in the Python API; textual `@{...}` queries currently pass semantics fields flat rather than as nested object literals |
+| `limit`      | int `>= 0`                        |                        none | Return at most N answers                        |
+| `offset`     | int `>= 0`                        |                         `0` | Skip the first N answers                        |
+| `order_by`   | string                            |                       empty | Comma-separated variable names used for sorting |
+| `max_depth`  | int `> 0`                         |                        `24` | Hard cap on recursive rule depth                |
+| `explain`    | `"false"`, `"true"`, or `"human"` |                   `"false"` | Explanation mode                                |
+| `focus`      | string                            |                     `"all"` | Post-filtering and ranking mode                 |
 
-### Policy values
+Unknown query option keys are rejected.
 
-| Value         | Behaviour                         |
-|---------------|-----------------------------------|
-| `"report"`    | No belief filter — all facts pass |
-| `"credulous"` | Only facts where `b > d`          |
-| `"skeptical"` | Only facts where `b > d`          |
+### Focus Values
 
----
+| Value             | Behaviour                                       |
+| ----------------- | ----------------------------------------------- |
+| `"all"`           | Do not filter answers                           |
+| `"support"`       | Keep answers with positive support              |
+| `"disbelief"`     | Keep answers with positive disbelief            |
+| `"contradiction"` | Keep answers with both support and disbelief    |
+| `"ignorance"`     | Keep answers with neither support nor disbelief |
+
+### Time Resolution
+
+The engine resolves time options as follows:
+
+* `effective_query_time = query_time or current UTC time`
+* `effective_valid_at = valid_at or effective_query_time`
+* `effective_known_at = known_at or effective_query_time`
+
+A visible belief record must satisfy both:
+
+* `record.et <= effective_known_at`
+* `effective_valid_at` falls inside the record validity window `[vf, vt]`, when those bounds are present
+
+### Advanced Epistemic-Semantics Options
+
+Queries also accept flat advanced options matching the epistemic-semantics configuration:
+
+The current `QueryOptions` model includes `epistemic_semantics`. In the Python API, this field accepts a mapping/object with any subset of the fields below. In textual `@{...}` query annotations, pass these fields flat (for example `@{body_truth:"minimum"}`); nested object literals for `epistemic_semantics` are not currently parsed.
+
+For textual queries, use the flat form, for example: `?- p(X) @{body_truth:"minimum"}`.
+
+| Option                     | Supported values in the current model                      |
+| -------------------------- | ---------------------------------------------------------- |
+
+| `body_truth`               | `product`, `minimum`                                       |
+| `body_falsity`             | `noisy_or`, `maximum`                                      |
+| `rule_propagation`         | `body_times_rule_weights`                                  |
+| `constraint_propagation`   | `body_times_constraint_weights_to_violation`               |
+| `support_aggregation`      | `noisy_or`, `maximum`, `capped_sum`                        |
+| `belnap_status`            | `nonzero`                                                  |
+| `non_atom`                 | `crisp_filters`                                            |
+| `rule_applicability`       | `body_truth_only`, `body_truth_discounted_by_body_falsity` |
+| `constraint_applicability` | `body_truth_only`, `body_truth_discounted_by_body_falsity` |
+
+These options control how evidence is propagated and aggregated during evaluation.
 
 ## Anonymous Variables
 
-A bare `_` in a query is a wildcard. Each `_` is renamed internally to `_0`, `_1`, etc.
-and appears by that name in the output.
+A bare `_` is an anonymous wildcard variable.
+
+Current behavior:
+
+* each `_` occurrence is internally renamed to a distinct generated variable such as `_0`, `_1`, `_2`, ...
+* anonymous variables are not projected into answer bindings
+* answer aggregation operates on projected bindings, so anonymous variables do not create visible output columns
+
+Examples:
 
 ```doxa
-?- edge(a, _).
-?- edge(_, _) @{distinct:true}.
+?- edge(a, _)
+?- edge(_, _)
 ```
-
----
 
 ## Terminal Slash Commands
 
-Interactive-mode only. Prefix is `/-`:
+Interactive-mode only. Prefix is `/-`.
 
-| Command                                          | Effect                                                   |
-|--------------------------------------------------|----------------------------------------------------------|
-| `/- dump [--ax\|--json] [--file <path>]`         | Print the current branch                                 |
-| `/- dump --no-predicates`                        | Exclude predicate declarations from dump                 |
-| `/- dump --no-belief-records`                    | Exclude facts from dump                                  |
-| `/- dump --no-rules`                             | Exclude rules from dump                                  |
-| `/- dump --no-constraints`                       | Exclude constraints from dump                            |
-| `/- info`                                        | Show session info: engine, backend, counts               |
-| `/- schema [--branch] [--query] [--file <path>]` | Print JSON schema for Branch / Query                     |
-| `/- load <file> [--fix]`                         | Load and merge a `.doxa` or `.json` file                 |
-| `/- unload predicate <name>/<arity>`             | Remove a predicate and all its facts and rules           |
-| `/- unload entity <name>`                        | Remove an entity and all facts referencing it            |
-| `/- unload rules`                                | Remove all rules                                         |
-| `/- unload constraints`                          | Remove all constraints                                   |
-| `/- unload all`                                  | Reset the branch to empty                                |
-| `/- search <pattern>`                            | Substring search over predicates, entities, facts, rules |
-| `/- help`                                        | Show help                                                |
-| `/- exit` / `/- quit`                            | Exit the terminal                                        |
-
----
+| Command                                          | Effect                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------- |
+| `/- dump [--ax\|--json] [--file <path>]`         | Print the current branch                                       |
+| `/- dump --no-predicates`                        | Exclude predicate declarations from dump                       |
+| `/- dump --no-belief-records`                    | Exclude facts from dump                                        |
+| `/- dump --no-rules`                             | Exclude rules from dump                                        |
+| `/- dump --no-constraints`                       | Exclude constraints from dump                                  |
+| `/- info`                                        | Show session info: engine, backend, counts                     |
+| `/- schema [--branch] [--query] [--file <path>]` | Print JSON schema for Branch and/or Query                      |
+| `/- load <file> [--fix]`                         | Load and merge a `.doxa` or `.json` file                       |
+| `/- unload predicate <name>/<arity>`             | Remove a predicate and related facts and rules                 |
+| `/- unload entity <name>`                        | Remove an entity and facts referencing it                      |
+| `/- unload rules`                                | Remove all rules                                               |
+| `/- unload constraints`                          | Remove all constraints                                         |
+| `/- unload all`                                  | Reset the branch to empty                                      |
+| `/- search <pattern>`                            | Substring search over predicates, entities, belief records, and rules |
+| `/- help`                                        | Show help                                                      |
+| `/- exit` / `/- quit`                            | Exit the terminal                                              |
 
 ## Hard Constraints
 
-- Facts must be **ground** — no variables as arguments.
-- No compound terms anywhere — `foo(bar(X))` is always a syntax error.
-- Predicate arity must be ≥ 1 — zero-arity predicate declarations are rejected.
-- Every predicate must be declared before its first use.
-- `pred` annotations accept `description` only — any other key is a parse error.
-- `pred` type lists are optional; when provided, they must match the declared arity.
-- **Predicate names cannot be reserved keywords** (`not`, `pred`) or builtin names (`eq`, `ne`, `lt`, `leq`, `gt`, `geq`, `add`, `sub`, `mul`, `div`, `between`, `int`, `string`, `float`, `entity`).
-- Identifiers (predicate names, entity ids) must be ASCII only.
-- `between` does not enumerate — all three arguments must already be bound.
-- Builtin goals cannot be negated with `not`.
+* Facts must be ground; variables are not allowed as fact arguments.
+* Compound terms are forbidden everywhere.
+* Predicate arity must be at least 1.
+* `pred` annotations accept `description` only.
+* If a `pred` type list is provided, it must match the declared arity.
+* Builtin goals cannot be negated with `not`.
+* `between` does not enumerate values; all three arguments must already be bound.
+* Predicate names cannot reuse builtin names.
+* Queries reject unknown option keys.
 
-## Why no compound terms?
+## Why No Compound Terms?
 
-Doxa should probably disallow compound terms not mainly because of parsing complexity, but because they clash with its belief-record model. In Doxa, annotations like `b` and `d` attach to explicit propositions, so a flat atom such as `parent(thomas, manuel) @{b:0.7, d:0.1}.` is clear: the epistemic status belongs to exactly that statement. With compound terms like `owns(thomas, car(bmw, blue)) @{...}.`, nested structure would smuggle additional semantic content into a single annotated record, and it becomes unclear whether and how the inner parts should inherit, derive, or expose their own belief/disbelief values. By forbidding compound terms, Doxa keeps every meaningful proposition explicit, which makes epistemic semantics, provenance, explanation, and validation much cleaner.
+Doxa forbids compound terms because epistemic annotations attach to explicit propositions. A flat atom such as:
+
+```doxa
+parent(zeus, heracles) @{b:0.7, d:0.1}.
+```
+
+has a clear epistemic status. A nested term such as:
+
+```doxa
+owns(zeus, car(bmw, blue)) @{b:0.7, d:0.1}.
+```
+
+would hide additional semantic structure inside a single annotated record and make it unclear how inner structure should relate to belief, disbelief, provenance, explanation, and validation.
+
+By keeping atoms flat, Doxa makes epistemic semantics and provenance handling substantially simpler.

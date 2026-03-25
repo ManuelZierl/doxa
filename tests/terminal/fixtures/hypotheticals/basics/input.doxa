@@ -1,0 +1,5 @@
+pred parent/2.
+?- assume(parent(zeus, heracles)), parent(X, heracles).
+?- parent(X, heracles).
+?- parent(zeus, heracles).
+/-exit

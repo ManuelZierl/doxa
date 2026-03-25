@@ -6,10 +6,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from doxa.cli.commands import _load_file, dispatch
 from doxa.core.branch import Branch
 from doxa.persistence.repository import BranchRepository
 from doxa.query.engine import QueryEngine, QueryResult
-from doxa.cli.commands import dispatch, _load_file
 
 # Try to enable readline history/completion
 try:
@@ -40,8 +40,9 @@ class TerminalState:
 
 
 def _make_empty_branch() -> Branch:
-    from doxa.core.base_kinds import BaseKind
     from datetime import datetime, timezone
+
+    from doxa.core.base_kinds import BaseKind
 
     return Branch(
         kind=BaseKind.branch,
@@ -110,11 +111,19 @@ def _run_query(state: TerminalState, text: str) -> None:
         print(f"  Query error: {exc}")
         return
 
-    if not result.success:
+    if not result.answers:
         print("  No results.")
     else:
-        for i, binding in enumerate(result.bindings, 1):
-            print(f"  {i}: {binding.values}")
+        for i, answer in enumerate(result.answers, 1):
+            parts = []
+            if answer.bindings:
+                parts.append(
+                    ", ".join(f"{k}={v!r}" for k, v in answer.bindings.items())
+                )
+            parts.append(
+                f"b={answer.b:.4g}, d={answer.d:.4g}, status={answer.belnap_status.value}"
+            )
+            print(f"  {i}: {' | '.join(parts)}")
 
     if result.explain is not None:
         print()

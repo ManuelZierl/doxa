@@ -1,7 +1,0 @@
-pred claim/1.
-claim(p) @{b:0.8, d:0.1}.
-claim(q) @{b:0.3, d:0.5}.
-?- claim(X) @{policy:"report"}.
-?- claim(X) @{policy:"credulous"}.
-?- claim(X) @{policy:"skeptical"}.
-/- exit

@@ -1,50 +1,51 @@
 """Core Pydantic schema models for the AX language."""
 
+from doxa.core.annotate_mixin import AnnotateMixin, DescriptionMixin
+from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.entity import Entity
-from doxa.core.var import Var
-from doxa.core.literal import Literal
-from doxa.core.literal_type import LiteralType
-from doxa.core.predicate import Predicate
 from doxa.core.belief_record import (
-    BeliefRecord,
     BeliefArg,
     BeliefEntityArg,
     BeliefLiteralArg,
+    BeliefRecord,
 )
-from doxa.core.rule import (
-    Rule,
-    RuleHeadArg,
-    RuleHeadVarArg,
-    RuleHeadEntityArg,
-    RuleHeadLiteralArg,
-    RuleGoal,
-    RuleAtomGoal,
-    RuleBuiltinGoal,
-    RuleGoalArg,
-    RuleGoalVarArg,
-    RuleGoalEntityArg,
-    RuleGoalLiteralArg,
-)
+from doxa.core.branch import Branch
+from doxa.core.builtins import Builtin
+from doxa.core.constraint import Constraint
+from doxa.core.entity import Entity
 from doxa.core.goal import (
-    Goal,
-    GoalBase,
+    AssumeGoal,
     AtomGoal,
     BuiltinGoal,
-    GoalArg,
-    VarArg,
     EntityArg,
+    Goal,
+    GoalArg,
+    GoalBase,
     LiteralArg,
+    VarArg,
 )
 from doxa.core.goal_kinds import GoalKind
-from doxa.core.term_kinds import TermKind
-from doxa.core.constraint import Constraint
-from doxa.core.branch import Branch
+from doxa.core.literal import Literal
+from doxa.core.literal_type import LiteralType
+from doxa.core.predicate import Predicate
 from doxa.core.query import Query
-from doxa.core.builtins import Builtin
-from doxa.core.annotate_mixin import AnnotateMixin, DescriptionMixin
-from doxa.core.audit_mixin import AuditMixin
+from doxa.core.rule import (
+    Rule,
+    RuleAtomGoal,
+    RuleBuiltinGoal,
+    RuleGoal,
+    RuleGoalArg,
+    RuleGoalEntityArg,
+    RuleGoalLiteralArg,
+    RuleGoalVarArg,
+    RuleHeadArg,
+    RuleHeadEntityArg,
+    RuleHeadLiteralArg,
+    RuleHeadVarArg,
+)
+from doxa.core.term_kinds import TermKind
+from doxa.core.var import Var
 
 __all__ = [
     "Base",
@@ -72,6 +73,7 @@ __all__ = [
     "RuleGoalLiteralArg",
     "Goal",
     "GoalBase",
+    "AssumeGoal",
     "AtomGoal",
     "BuiltinGoal",
     "GoalArg",

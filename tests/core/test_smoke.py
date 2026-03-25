@@ -1,11 +1,6 @@
 """Smoke tests to verify the new package structure imports correctly."""
 
-from doxa.core import (
-    BaseKind,
-    Branch,
-    Entity,
-    Predicate,
-)
+from doxa.core import BaseKind, Branch, Entity, Predicate
 from doxa.persistence import BranchRepository
 from doxa.persistence.memory import InMemoryBranchRepository
 from doxa.query import QueryEngine

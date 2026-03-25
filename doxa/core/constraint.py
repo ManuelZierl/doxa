@@ -1,53 +1,22 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Literal, Dict
+from typing import Dict, List, Literal
 
 from pydantic import Field, model_validator
 
+from doxa.core._parsing.annotation_utils import extract_annotation_kwargs
+from doxa.core._parsing.parsing_utils import split_annotation_suffix, split_top_level
 from doxa.core.annotate_mixin import AnnotateMixin
 from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.goal import (
-    AtomGoal,
-    BuiltinGoal,
-    EntityArg,
-    Goal,
-    GoalArg,
-    GoalBase,
-    LiteralArg,
-    VarArg,
-    goal_arg_from_doxa,
-    goal_from_doxa,
-)
-from doxa.core.goal_kinds import GoalKind
-from doxa.core.var import Var
-from doxa.core._parsing.annotation_utils import (
-    extract_annotation_kwargs,
-)
-from doxa.core._parsing.parsing_utils import (
-    split_annotation_suffix,
-    split_top_level,
-)
-import re
-
-# Backward-compatible aliases
-ConstraintGoalBase = GoalBase
-ConstraintAtomGoal = AtomGoal
-ConstraintBuiltinGoal = BuiltinGoal
-ConstraintGoal = Goal
-ConstraintVarArg = VarArg
-ConstraintEntityArg = EntityArg
-ConstraintLiteralArg = LiteralArg
-ConstraintGoalArg = GoalArg
-constraint_goal_from_doxa = goal_from_doxa
-constraint_goal_arg_from_doxa = goal_arg_from_doxa
+from doxa.core.goal import Goal, goal_from_doxa
 
 
 class Constraint(Base, AuditMixin, AnnotateMixin):
     kind: Literal[BaseKind.constraint] = Field(...)
-    goals: List["ConstraintGoal"] = Field(
+    goals: List[Goal] = Field(
         ...,
         description="Ordered constraint body goals evaluated left-to-right.",
     )
@@ -74,11 +43,9 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
             escaped = self.description.replace("\\", "\\\\").replace('"', '\\"')
             parts.append(f'description:"{escaped}"')
 
-        if self.b != 1.0:
-            parts.append(f"b:{self.b}")
+        parts.append(f"b:{self.b}")
 
-        if self.d != 0.0:
-            parts.append(f"d:{self.d}")
+        parts.append(f"d:{self.d}")
 
         if self.src is not None:
             parts.append(f"src:{self.src}")
@@ -128,9 +95,9 @@ class Constraint(Base, AuditMixin, AnnotateMixin):
         if not goal_parts:
             raise ValueError("Constraint body must contain at least one goal.")
 
-        goals: List[ConstraintGoal] = []
+        goals: List[Goal] = []
         for i, part in enumerate(goal_parts):
-            goal = constraint_goal_from_doxa(part)
+            goal = goal_from_doxa(part)
             goals.append(goal.model_copy(update={"idx": i}))
 
         kwargs: Dict[str, object] = {

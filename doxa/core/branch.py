@@ -1,15 +1,15 @@
 from datetime import datetime, timezone
-from typing import Literal, List, Any, Dict
+from typing import Any, Dict, List, Literal
 
 from pydantic import Field
 
-from doxa.core.predicate import Predicate
 from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 from doxa.core.belief_record import BeliefRecord
 from doxa.core.constraint import Constraint
 from doxa.core.entity import Entity
+from doxa.core.predicate import Predicate
 from doxa.core.rule import Rule
 from doxa.core.schema_utils import compact_schema_for_llm
 

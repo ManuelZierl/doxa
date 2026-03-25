@@ -1,0 +1,11 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: X='alice' | b=1, d=0, status=true
+  2: X='carol' | b=1, d=0, status=true
+doxa>   1: M='hello world', X='alice' | b=1, d=0, status=true
+  2: M='foo bar', X='bob' | b=1, d=0, status=true
+  3: M='hello world', X='carol' | b=1, d=0, status=true
+doxa>   No results.
+doxa>   Goodbye.

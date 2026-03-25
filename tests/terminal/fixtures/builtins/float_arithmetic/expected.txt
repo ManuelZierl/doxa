@@ -1,0 +1,6 @@
+doxa>   1: R=3.5 | b=1, d=0, status=true
+doxa>   1: R=3 | b=1, d=0, status=true
+doxa>   1: R=0.25 | b=1, d=0, status=true
+doxa>   1: R=4 | b=1, d=0, status=true
+doxa>   1: R=4.5 | b=1, d=0, status=true
+doxa>   Goodbye.

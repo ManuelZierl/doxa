@@ -1,11 +1,6 @@
 import pytest
 
-from doxa.cli.compat import (
-    check_compat,
-    default_engine_for,
-    MEMORY_KINDS,
-    ENGINE_KINDS,
-)
+from doxa.cli.compat import ENGINE_KINDS, MEMORY_KINDS, check_compat, default_engine_for
 
 
 def test_memory_kinds_defined() -> None:

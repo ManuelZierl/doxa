@@ -1,0 +1,17 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: X='apple' | b=1, d=0, status=true
+  2: X='cherry' | b=1, d=0, status=true
+doxa>   1: X='banana' | b=1, d=0, status=true
+doxa>   1: T=1.7999999999999998, X='apple' | b=1, d=0, status=true
+  2: T=0.8999999999999999, X='banana' | b=1, d=0, status=true
+  3: T=3.5999999999999996, X='cherry' | b=1, d=0, status=true
+doxa>   Goodbye.

@@ -13,7 +13,6 @@ import click
 
 from doxa.core.branch import Branch
 
-
 # Default template paths (embedded in package)
 _DEFAULT_EXTRACT_TEMPLATE = Path(__file__).parent / "extract_prompt_template.md"
 _DEFAULT_QUERY_TEMPLATE = Path(__file__).parent / "query_prompt_template.md"

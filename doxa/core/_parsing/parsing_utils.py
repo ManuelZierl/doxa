@@ -3,7 +3,6 @@
 import re
 from typing import List
 
-
 _INT_RE = re.compile(r"-?\d+")
 _FLOAT_RE = re.compile(r"-?(?:\d+\.\d*|\d*\.\d+)")
 _GOAL_CALL_RE = re.compile(

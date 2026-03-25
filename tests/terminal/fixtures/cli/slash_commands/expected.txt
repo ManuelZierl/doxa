@@ -1,0 +1,12 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa> pred item/1.
+item(x) @{b:1.0, d:0.0, et:"2026-03-20T10:22:23.639651Z"}.
+item(y) @{b:1.0, d:0.0, et:"2026-03-20T10:22:23.639651Z"}.
+doxa>   Predicates (1):
+    pred item/1
+  Belief records (2):
+    item(x) @{b:1.0, d:0.0, et:"2026-03-20T10:22:23.639651Z"}
+    item(y) @{b:1.0, d:0.0, et:"2026-03-20T10:22:23.639651Z"}
+doxa>   Goodbye.

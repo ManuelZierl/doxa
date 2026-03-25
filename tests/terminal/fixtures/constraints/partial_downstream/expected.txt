@@ -1,0 +1,9 @@
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 constraint(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: X='a' | b=1, d=0, status=true
+  2: X='b' | b=1, d=0.5, status=both
+doxa>   1: X='a' | b=1, d=0, status=true
+  2: X='b' | b=0.5, d=0, status=true
+doxa>   Goodbye.

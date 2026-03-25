@@ -1,0 +1,12 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   Added: 2 predicate(s), 1 rule(s)
+doxa>   1: Y='b' | b=1, d=0, status=true
+  2: Y='c' | b=1, d=0, status=true
+  3: Y='d' | b=1, d=0, status=true
+doxa>   1: b=0, d=0, status=neither
+doxa>   Goodbye.

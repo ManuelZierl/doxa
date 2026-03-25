@@ -1,73 +1,107 @@
-# Doxa
+# doxa
 
-A logic-programming knowledge base toolkit built on Pydantic. Doxa provides a Datalog-like language (doxa-lang) for defining predicates, belief records, rules, and integrity constraints — plus swappable persistence and query backends.
+> **Warning**
+> Doxa is currently in an **early, unstable stage**.
+> APIs, query semantics, file formats, and behavior may change without notice.
+> It is not yet recommended for production use.
 
-## Installation
+An epistemic knowledge representation language — Datalog/Prolog-grounded, temporally-aware, conflict-sensitive, and auditable.
+
+## The Problem
+
+Existing knowledge systems collapse important epistemic distinctions into a single dimension:
+
+- **Classical Datalog / SQL** — facts are ground truth. Conflict is a bug, ignorance is absence, decay requires manual deletion.
+- **Probabilistic systems** — a scalar *p ∈ [0,1]* cannot distinguish *no evidence* from *equal evidence both ways*; conflict, ignorance, and uncertainty all look the same.
+- **Graph / triple stores** — no first-class uncertainty model at all.
+
+None of these can represent: *"Source A strongly believes X, Source B strongly disbelieves X, valid between D1–D2, and the conflict is unresolved."*
+
+## What Doxa Does
+
+Every fact in Doxa is a **BeliefRecord** — a ground atom paired with:
+
+- **b / d** — independent degrees of evidence *for* and *against* (b + d ≤ 1)
+- **src** — who asserts this belief
+- **vf / vt** — real-world validity period
+- **et** — epistemic time (when the belief entered the KB)
+
+This yields four qualitatively distinct epistemic states grounded in [Belnap's four-valued logic](https://en.wikipedia.org/wiki/Four-valued_logic):
+
+| State     | b   | d   | Meaning                   |
+|-----------|-----|-----|---------------------------|
+| **None**  | 0   | 0   | No evidence either way    |
+| **True**  | > 0 | 0   | Evidence for, not against |
+| **False** | 0   | > 0 | Evidence against, not for |
+| **Both**  | > 0 | > 0 | Conflicting evidence      |
+
+No single confidence scalar can represent all four — the distinction between *None* and *Both* is categorical, not a matter of degree.
+
+```doxa
+bird(owl) @{b:0.98, src:"https://en.wikipedia.org/wiki/Owl", et:"2026-03-24"}.
+weight_g(owl, 1500) @{b:0.98, src:"https://en.wikipedia.org/wiki/Owl", et:"2026-03-24"}.
+wingspan_cm(owl, 110) @{b:0.97, src:"https://en.wikipedia.org/wiki/Owl", et:"2026-03-24"}.
+
+bird(penguin) @{b:1.0, src:"https://en.wikipedia.org/wiki/Penguin", et:"2026-03-24"}.
+weight_g(penguin, 30000) @{b:0.95, src:"https://en.wikipedia.org/wiki/Penguin", et:"2026-03-24"}.
+wingspan_cm(penguin, 60) @{b:0.90, src:"https://en.wikipedia.org/wiki/Penguin", et:"2026-03-24"}.
+
+can_fly(X) :-
+    bird(X),
+    weight_g(X, W),
+    wingspan_cm(X, S),
+    div(W, S, R),
+    lt(R, 20) @{
+        b:0.98, 
+        src:"simplified heuristic inspired by wing loading (weight / wing area)", 
+        et:"2026-03-24"
+    }.
+```
 
 ```bash
-pip install -e ".[dev]"
-# With PostgreSQL support:
-pip install -e ".[postgres]"
+doxa> ?- can_fly(owl).
+  1: b=0.913, d=0, status=true
+doxa> ?- can_fly(penguin). 
+  1: b=0, d=0, status=neither
 ```
 
-## Quick Start
+## Key Properties
 
-```python
-from doxa.core import Branch
-from doxa.persistence.memory import InMemoryBranchRepository
-from doxa.query.memory import InMemoryQueryEngine
+- **Conflict without corruption** — disagreeing sources produce *Both*, not an average; conflict is queryable, and the query policy (credulous/skeptical) resolves it at query time
+- **Ignorance without inference** — unasserted facts return *None*, not a prior or default false
+- **Time as a language primitive** — temporal validity and epistemic time are enforced uniformly via `asof` query semantics, not modeling conventions
+- **Auditability built in** — derivation traces (`explain`) name every supporting BeliefRecord, its source, validity window, and belief degree
+- **Guaranteed termination** — Datalog semantics ensure every query over a finite KB terminates
 
-branch = Branch.from_ax("""
-    pred parent/2.
-    parent(alice, bob).
-    parent(bob, charlie).
-    ancestor(X, Y) :- parent(X, Y).
-    ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z).
-""")
+## Foundations
 
-repo = InMemoryBranchRepository()
-repo.save(branch)
+Doxa's parametric combination algebra follows [Lakshmanan & Shiri (2001)](https://doi.org/10.1109/69.929926). Its *(b, d)* semantics are grounded in [Belnap (1977)](https://link.springer.com/chapter/10.1007/978-94-010-1161-7_2) and instantiated with [Jøsang's subjective logic (2016)](https://link.springer.com/book/10.1007/978-3-319-42337-1). Doxa's contribution is the co-design of these elements into a single language with first-class provenance, temporal annotation, and audit traces — promoted from modeling conventions to language primitives enforced by the parser.
 
-engine = InMemoryQueryEngine()
-results = engine.query(branch, "ancestor(alice, Z)?")
-```
+## Language Specification
 
-## CLI
+For the full formal syntax, semantics, builtins, query options, and edge cases see the **[Language Specification](doxa/SPECIFICATION.md)**.
 
-```
-doxa                                  Start interactive terminal (in-memory)
-doxa --memory postgres                Use PostgreSQL backend
-doxa --file knowledge.doxa            Pre-load a file before starting
-doxa --file a.doxa --file b.json      Pre-load and merge multiple files
-doxa prompt <resource>                Generate an extraction prompt
-doxa --version / --help
-```
+## Repository Layout
 
-Set `DOXA_POSTGRES_URL` to configure the PostgreSQL connection (default: `postgresql://localhost/doxa`).
+| Path                | Description                               |
+|---------------------|-------------------------------------------|
+| `doxa/core/`        | Core language model types and parsing     |
+| `doxa/query/`       | Query execution engine                    |
+| `doxa/persistence/` | Storage backends (in-memory, PostgreSQL)  |
+| `doxa/cli/`         | CLI entry points and interactive terminal |
+| `tests/`            | Automated tests and fixtures              |
 
-## Doxa Language
-
-| Syntax | Meaning |
-|---|---|
-| `pred name/arity.` | Declare a predicate |
-| `parent(alice, bob).` | Belief record (ground fact) |
-| `ancestor(X,Z) :- parent(X,Y), ancestor(Y,Z).` | Derivation rule |
-| `!:- sibling(X, X).` | Integrity constraint |
-| `sig(name/1, entity/1).` | Signature shorthand (expands to constraints) |
-| `@{src:s, b:0.9}` | Annotation on any statement |
-
-## Architecture
-
-| Package | Role |
-|---|---|
-| `doxa.core` | Pydantic domain models — `Branch`, `BeliefRecord`, `Rule`, `Constraint`, `Predicate`, `Entity` |
-| `doxa.persistence` | Abstract `BranchRepository` with in-memory and PostgreSQL backends |
-| `doxa.query` | Abstract `QueryEngine` with in-memory (pure Python Datalog) and PostgreSQL backends |
-| `doxa.cli` | Click-based interactive terminal and `prompt` subcommand |
-
-## Development
+## Getting Started
 
 ```bash
-pytest          # run tests
-ruff check doxa # lint
+pip install -e .            # install
+pip install -e ".[postgres]" # optional PostgreSQL backend
+pytest                       # run tests
+doxa                         # launch interactive terminal
 ```
+
+**Requires Python ≥ 3.11**
+
+## License
+
+MIT

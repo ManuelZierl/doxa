@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Optional, List
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,8 +32,8 @@ class AnnotateMixin(DescriptionMixin):
         description="Optional source entity id for provenance.",
     )
 
-    et: Optional[datetime] = Field(
-        None,
+    et: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Epistemic time in UTC (when AX learned this record).",
     )
     vf: Optional[datetime] = Field(

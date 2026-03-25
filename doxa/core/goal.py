@@ -4,21 +4,20 @@ from typing import Annotated, List, Literal, Union
 
 from pydantic import Field, model_validator
 
-from doxa.core.base import Base
-from doxa.core.base_kinds import BaseKind
-from doxa.core.builtins import Builtin, BUILTIN_ARITY
-from doxa.core.entity import Entity
-from doxa.core.goal_kinds import GoalKind
-from doxa.core.literal_type import LiteralType
-from doxa.core.var import Var
 from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
     parse_python_string_literal,
-    render_string_literal,
     split_top_level,
 )
+from doxa.core.base import Base
+from doxa.core.base_kinds import BaseKind
+from doxa.core.builtins import BUILTIN_ARITY, Builtin
+from doxa.core.entity import Entity
+from doxa.core.goal_kinds import GoalKind
+from doxa.core.literal_type import LiteralType
+from doxa.core.var import Var
 
 _GOAL_CALL_RE = get_goal_call_regex()
 _INT_RE = get_int_regex()
@@ -33,6 +32,9 @@ def goal_from_doxa(inp: str) -> "Goal":
     s = inp.strip()
     if not s:
         raise ValueError("Goal input must not be empty.")
+
+    if s.startswith("assume(") and s.endswith(")"):
+        return AssumeGoal.from_doxa(s)
 
     negated = False
     core = s
@@ -142,6 +144,44 @@ class AtomGoal(GoalBase):
         )
 
 
+class AssumeGoal(GoalBase):
+    goal_kind: Literal[GoalKind.assume] = Field(GoalKind.assume)
+    assumptions: List["AtomGoal"] = Field(
+        ...,
+        description="List of ground atom goals treated as temporary facts.",
+    )
+
+    def to_doxa(self) -> str:
+        inner = ", ".join(a.to_doxa() for a in self.assumptions)
+        return f"assume({inner})"
+
+    @classmethod
+    def from_doxa(cls, inp: str) -> "AssumeGoal":
+        if not isinstance(inp, str):
+            raise TypeError("AssumeGoal input must be a string.")
+
+        s = inp.strip()
+        if not s.startswith("assume(") or not s.endswith(")"):
+            raise ValueError(f"Invalid assume goal syntax: {inp!r}")
+
+        inner = s[len("assume(") : -1].strip()
+        if not inner:
+            raise ValueError("assume() must contain at least one assumption.")
+
+        parts = split_top_level(inner)
+        assumptions: List[AtomGoal] = []
+        for i, part in enumerate(parts):
+            atom = AtomGoal.from_doxa(part)
+            assumptions.append(atom.model_copy(update={"idx": i}))
+
+        return cls(
+            kind=BaseKind.goal,
+            goal_kind=GoalKind.assume,
+            idx=0,
+            assumptions=assumptions,
+        )
+
+
 class BuiltinGoal(GoalBase):
     goal_kind: Literal[GoalKind.builtin] = Field(GoalKind.builtin)
     builtin_name: Builtin = Field(..., description="Builtin when goal_kind='builtin'.")
@@ -198,7 +238,7 @@ class BuiltinGoal(GoalBase):
 
 
 Goal = Annotated[
-    Union[AtomGoal, BuiltinGoal],
+    Union[AtomGoal, BuiltinGoal, AssumeGoal],
     Field(discriminator="goal_kind"),
 ]
 

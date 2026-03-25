@@ -1,0 +1,5 @@
+doxa>   1: b=1, d=0, status=true
+doxa>   1: b=0, d=0, status=neither
+doxa>   1: b=1, d=0, status=true
+doxa>   1: b=1, d=0, status=true
+doxa>   Goodbye.

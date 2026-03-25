@@ -1,13 +1,14 @@
 from pathlib import Path
+
 from click.testing import CliRunner
 
 from doxa.cli.prompt import (
-    extract_prompt_command,
-    generate_prompt,
     _detect_resource_type,
-    _get_resource_type_description,
     _extract_kb_context,
     _generate_delta_rules,
+    _get_resource_type_description,
+    extract_prompt_command,
+    generate_prompt,
 )
 
 

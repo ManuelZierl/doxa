@@ -1,5 +1,0 @@
-doxa>   Added: 1 predicate(s)
-doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   1: {'X': 'launch'}
-doxa>   No results.
-doxa>   Goodbye.

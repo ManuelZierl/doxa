@@ -1,13 +1,12 @@
-"""Test that inline ground goal assumptions work correctly and don't persist."""
+"""Test that explicit assume(...) hypothetical assumptions work correctly."""
 
 from doxa.core.branch import Branch
 from doxa.core.query import Query
 from doxa.query.memory import InMemoryQueryEngine
 
 
-def test_inline_assumptions_work():
-    """Test that fully ground query goals work as inline assumptions."""
-    # Create a simple knowledge base with rules but no facts about my_company
+def test_assume_basic():
+    """Test that assume(...) injects temporary facts for rule derivation."""
     kb_text = """
 pred has_employee_count/2.
 pred has_net_turnover/2.
@@ -27,25 +26,23 @@ subject_to_due_diligence(lksg, C, 2027) :-
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Query with inline assumptions (fully ground goals)
     query = Query.from_doxa(
-        "?- has_employee_count(my_company, 1200), "
-        "has_net_turnover(my_company, 500000000), "
+        "?- assume("
+        "has_employee_count(my_company, 1200), "
+        "has_net_turnover(my_company, 500000000)"
+        "), "
         "subject_to_due_diligence(lksg, my_company, Y)"
     )
 
     results = engine.evaluate(branch, query)
 
-    # Should find results using the inline assumptions
-    assert results.success
-    assert len(results.bindings) == 2
-    years = {binding.values["Y"] for binding in results.bindings}
+    assert len(results.answers) == 2
+    years = {binding.bindings["Y"] for binding in results.answers}
     assert years == {2024, 2027}
 
 
-def test_inline_assumptions_not_persisted():
-    """Test that inline assumptions are temporary and don't persist to the KB."""
-    # Create a simple knowledge base
+def test_assume_not_persisted():
+    """Test that assumed facts are temporary and don't persist to the KB."""
     kb_text = """
 pred has_employee_count/2.
 pred has_net_turnover/2.
@@ -59,56 +56,31 @@ subject_to_due_diligence(lksg, C, 2024) :-
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # First query with inline assumptions
     query1 = Query.from_doxa(
-        "?- has_employee_count(my_company, 1200), "
-        "has_net_turnover(my_company, 500000000), "
+        "?- assume("
+        "has_employee_count(my_company, 1200), "
+        "has_net_turnover(my_company, 500000000)"
+        "), "
         "subject_to_due_diligence(lksg, my_company, Y)"
     )
 
     results1 = engine.evaluate(branch, query1)
-    assert results1.success
-    assert len(results1.bindings) == 1
-    assert results1.bindings[0].values["Y"] == 2024
+    assert len(results1.answers) == 1
+    assert results1.answers[0].bindings["Y"] == 2024
 
-    # Second query trying to look up the inline assumption
-    # This should fail because the inline assumption was temporary
+    # Second query trying to look up the assumed fact
     query2 = Query.from_doxa("?- has_employee_count(my_company, X)")
     results2 = engine.evaluate(branch, query2)
 
-    # Should have no results - the inline assumption was not persisted
-    assert not results2.success
-    assert len(results2.bindings) == 0
+    # Should have no results - the assumption was not persisted
+    assert len(results2.answers) == 0
 
     # Verify the branch itself was not modified
-    assert len(branch.belief_records) == 0  # No facts were added
+    assert len(branch.belief_records) == 0
 
 
-def test_inline_assumptions_vs_variables():
-    """Test that only fully ground goals are treated as inline assumptions."""
-    kb_text = """
-pred has_employee_count/2.
-
-has_employee_count(company_a, 1000).
-has_employee_count(company_b, 2000).
-"""
-
-    branch = Branch.from_doxa(kb_text)
-    engine = InMemoryQueryEngine()
-
-    # Query with variables - should do KB lookup
-    query = Query.from_doxa("?- has_employee_count(C, E)")
-    results = engine.evaluate(branch, query)
-
-    # Should find the two facts in the KB
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {binding.values["C"] for binding in results.bindings}
-    assert companies == {"company_a", "company_b"}
-
-
-def test_inline_assumptions_with_literals():
-    """Test that inline assumptions work with different literal types."""
+def test_assume_with_literals():
+    """Test that assume(...) works with different literal types."""
     kb_text = """
 pred has_value/2.
 pred check_value/2.
@@ -119,17 +91,74 @@ check_value(X, V) :- has_value(X, V), geq(V, 100).
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Test with integer literal
-    query = Query.from_doxa("?- has_value(item1, 150), check_value(item1, V)")
+    query = Query.from_doxa("?- assume(has_value(item1, 150)), check_value(item1, V)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 1
-    assert results.bindings[0].values["V"] == 150
+    assert len(results.answers) == 1
+    assert results.answers[0].bindings["V"] == 150
+
+
+def test_assume_ground_query_consistency():
+    """Test the original bug: assume must work identically for ground
+    and variable queries.
+
+    Previously ground queries returned 'neither' while variable queries
+    returned 'true'.  With explicit assume(...) this inconsistency is gone.
+    """
+    kb_text = """
+pred employees/2.
+pred company/1.
+pred turnover_mio/2.
+pred current_csrd_scope/1.
+pred out_of_scope_under_current_csrd/1.
+
+current_csrd_scope(X) :- 
+    employees(X, E), 
+    gt(E, 1000), 
+    turnover_mio(X, R), 
+    gt(R, 450).
+
+out_of_scope_under_current_csrd(X) :-
+    company(X),
+    not current_csrd_scope(X).
+"""
+
+    branch = Branch.from_doxa(kb_text)
+    engine = InMemoryQueryEngine()
+
+    # Ground query (previously broken)
+    query_ground = Query.from_doxa(
+        "?- assume("
+        "employees(nordwind, 450), "
+        "company(nordwind), "
+        "turnover_mio(nordwind, 55)"
+        "), out_of_scope_under_current_csrd(nordwind)"
+    )
+    result_ground = engine.evaluate(branch, query_ground)
+
+    # Variable query
+    query_var = Query.from_doxa(
+        "?- assume("
+        "employees(nordwind, 450), "
+        "company(nordwind), "
+        "turnover_mio(nordwind, 55)"
+        "), out_of_scope_under_current_csrd(X)"
+    )
+    result_var = engine.evaluate(branch, query_var)
+
+    # Both must produce a true answer
+    assert len(result_ground.answers) == 1
+    assert result_ground.answers[0].b > 0
+    assert result_ground.answers[0].belnap_status.value == "true"
+
+    assert len(result_var.answers) == 1
+    assert result_var.answers[0].bindings["X"] == "nordwind"
+    assert result_var.answers[0].b > 0
+    assert result_var.answers[0].belnap_status.value == "true"
 
 
 def test_backward_compatibility():
-    """Test that existing queries without inline assumptions still work."""
+    """Test that existing queries without assume(...) still work."""
     kb_text = """
 pred subject_to_due_diligence/3.
 
@@ -140,13 +169,11 @@ subject_to_due_diligence(lksg, company_over_1000_employees, 2024).
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Traditional query with variables
     query = Query.from_doxa("?- subject_to_due_diligence(lksg, C, Year)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {binding.values["C"] for binding in results.bindings}
+    assert len(results.answers) == 2
+    companies = {binding.bindings["C"] for binding in results.answers}
     assert companies == {"company_over_3000_employees", "company_over_1000_employees"}
 
 
@@ -165,34 +192,22 @@ q(y, 20).
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Query with multiple _ - each should be independent
     query = Query.from_doxa("?- p(_, X), q(_, Y)")
     results = engine.evaluate(branch, query)
 
-    # Should get all combinations: 2 p facts × 2 q facts = 4 results
-    assert results.success
-    assert len(results.bindings) == 4
+    assert len(results.answers) == 4
 
-    # Verify we get all combinations of X and Y
-    xy_pairs = {(b.values["X"], b.values["Y"]) for b in results.bindings}
+    xy_pairs = {(b.bindings["X"], b.bindings["Y"]) for b in results.answers}
     assert xy_pairs == {(1, 10), (1, 20), (2, 10), (2, 20)}
 
-    # Verify that the anonymous variables are NOT projected into output
-    # (bare _ is anonymous and should be hidden from user-facing results)
-    for binding in results.bindings:
-        assert "_0" not in binding.values
-        assert "_1" not in binding.values
+    for answer in results.answers:
+        assert "_0" not in answer.bindings
+        assert "_1" not in answer.bindings
 
 
-def test_variable_in_inline_assumptions_skolemized():
-    """Test that a variable shared across EDB assumption goals and an IDB
-    derivation goal is automatically skolemized so the query works the same
-    as when a concrete entity name is used.
-
-    Regression test for the bug where:
-      ?- has_employee_count(C, 1200), is_derived(C).   → No results
-      ?- has_employee_count(comp, 1200), is_derived(comp). → results
-    """
+def test_assume_with_variable_in_derivation():
+    """Test that assume(...) with a concrete entity works through rule derivation,
+    and that variable queries also bind properly."""
     kb_text = """
 pred has_employee_count/2.
 pred has_net_turnover/2.
@@ -208,34 +223,33 @@ is_large_company(C) :-
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Query with a variable C (was broken before skolemization fix)
-    query_var = Query.from_doxa(
-        "?- has_employee_count(C, 1200), "
-        "has_net_turnover(C, 60000000), "
-        "is_large_company(C)"
-    )
-    results_var = engine.evaluate(branch, query_var)
-
-    # Query with a concrete entity name (always worked)
+    # Concrete entity in assume
     query_ent = Query.from_doxa(
-        "?- has_employee_count(acme, 1200), "
-        "has_net_turnover(acme, 60000000), "
-        "is_large_company(acme)"
+        "?- assume("
+        "has_employee_count(acme, 1200), "
+        "has_net_turnover(acme, 60000000)"
+        "), is_large_company(acme)"
     )
     results_ent = engine.evaluate(branch, query_ent)
 
-    # Both must succeed with the same number of results
-    assert results_ent.success
-    assert results_var.success
-    assert len(results_var.bindings) == len(results_ent.bindings)
+    assert len(results_ent.answers) == 1
+    assert results_ent.answers[0].b > 0
 
-    # The variable query should bind C to the Skolem entity name
-    assert all("C" in b.values for b in results_var.bindings)
+    # Variable derivation goal should also work
+    query_var = Query.from_doxa(
+        "?- assume("
+        "has_employee_count(acme, 1200), "
+        "has_net_turnover(acme, 60000000)"
+        "), is_large_company(X)"
+    )
+    results_var = engine.evaluate(branch, query_var)
+
+    assert len(results_var.answers) == 1
+    assert results_var.answers[0].bindings["X"] == "acme"
 
 
-def test_skolemization_does_not_affect_pure_queries():
-    """Variables that only appear in EDB goals (no IDB goal) must NOT be
-    skolemized — they should still do normal KB lookups."""
+def test_pure_lookup_queries_still_work():
+    """Variables in non-assume atom goals should still do normal KB lookups."""
     kb_text = """
 pred has_employee_count/2.
 
@@ -246,19 +260,78 @@ has_employee_count(company_b, 3000).
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    # Pure lookup query — C and E are variables, no IDB goals
     query = Query.from_doxa("?- has_employee_count(C, E)")
     results = engine.evaluate(branch, query)
 
-    assert results.success
-    assert len(results.bindings) == 2
-    companies = {b.values["C"] for b in results.bindings}
+    assert len(results.answers) == 2
+    companies = {b.bindings["C"] for b in results.answers}
     assert companies == {"company_a", "company_b"}
 
-    # Single-variable lookup with one ground arg — still a query, not an assumption
     query2 = Query.from_doxa("?- has_employee_count(company_a, X)")
     results2 = engine.evaluate(branch, query2)
 
-    assert results2.success
-    assert len(results2.bindings) == 1
-    assert results2.bindings[0].values["X"] == 500
+    assert len(results2.answers) == 1
+    assert results2.answers[0].bindings["X"] == 500
+
+
+def test_assume_parsing_roundtrip():
+    """Test that assume(...) can be parsed and serialized back to doxa."""
+    query = Query.from_doxa("?- assume(p(a, 1), q(b)), r(X)")
+
+    assert len(query.goals) == 2  # assume goal + r(X)
+
+    doxa = query.to_doxa()
+    assert "assume(" in doxa
+    assert "r(X)" in doxa
+
+    # Re-parse the serialized form
+    reparsed = Query.from_doxa(doxa)
+    assert len(reparsed.goals) == 2
+
+
+def test_assume_with_negation_in_rules():
+    """Test that assume works with rules containing negation (not)."""
+    kb_text = """
+pred registered/1.
+pred approved/1.
+pred pending_approval/1.
+
+pending_approval(X) :- registered(X), not approved(X).
+"""
+
+    branch = Branch.from_doxa(kb_text)
+    engine = InMemoryQueryEngine()
+
+    # Assume company is registered but NOT approved
+    query = Query.from_doxa("?- assume(registered(acme)), pending_approval(X)")
+    results = engine.evaluate(branch, query)
+
+    assert len(results.answers) == 1
+    assert results.answers[0].bindings["X"] == "acme"
+
+    # Now assume both registered and approved — should NOT be pending
+    query2 = Query.from_doxa(
+        "?- assume(registered(acme), approved(acme)), pending_approval(X)"
+    )
+    results2 = engine.evaluate(branch, query2)
+
+    assert len(results2.answers) == 0
+
+
+def test_assume_does_not_shadow_existing_facts():
+    """Assume adds to (not replaces) existing facts."""
+    kb_text = """
+pred score/2.
+
+score(alice, 80).
+"""
+
+    branch = Branch.from_doxa(kb_text)
+    engine = InMemoryQueryEngine()
+
+    # Assume an additional fact
+    query = Query.from_doxa("?- assume(score(bob, 90)), score(X, Y)")
+    results = engine.evaluate(branch, query)
+
+    names = {b.bindings["X"] for b in results.answers}
+    assert names == {"alice", "bob"}

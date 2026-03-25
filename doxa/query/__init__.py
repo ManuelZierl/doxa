@@ -3,3 +3,11 @@
 from doxa.query.engine import QueryEngine, QueryResult
 
 __all__ = ["QueryEngine", "QueryResult"]
+
+
+def __getattr__(name: str):
+    if name == "PostgresQueryEngine":
+        from doxa.query.postgres import PostgresQueryEngine
+
+        return PostgresQueryEngine
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

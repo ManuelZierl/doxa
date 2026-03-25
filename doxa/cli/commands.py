@@ -231,9 +231,10 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
       constraints                remove all constraints
       all                        reset branch to empty
     """
-    from doxa.core.branch import Branch
-    from doxa.core.base_kinds import BaseKind
     from datetime import datetime, timezone
+
+    from doxa.core.base_kinds import BaseKind
+    from doxa.core.branch import Branch
 
     if not args:
         print(
@@ -377,9 +378,10 @@ def cmd_search(state: "TerminalState", args: list[str]) -> None:
 
 def _auto_fix_kinds(data: dict, error: ValidationError) -> dict:
     """Auto-fix missing 'kind' fields and required Branch fields in JSON data."""
-    from doxa.core.base_kinds import BaseKind
-    from datetime import datetime, timezone
     import copy
+    from datetime import datetime, timezone
+
+    from doxa.core.base_kinds import BaseKind
 
     data = copy.deepcopy(data)
 
@@ -509,9 +511,11 @@ def _fix_nested_kinds(obj, parent_context=None):
 
 
 def _load_file(path: Path, fix_missing_kinds: bool = False) -> "Branch":
-    from doxa.core.branch import Branch
     import json as json_module
+
     from pydantic import ValidationError
+
+    from doxa.core.branch import Branch
 
     suffix = path.suffix.lower()
 

@@ -1,0 +1,16 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 3 predicate(s), 1 rule(s)
+doxa>   1: S='s1' | b=1, d=0, status=true
+doxa>   1: S='s1' | b=1, d=0, status=true
+doxa>   1: S='s1' | b=1, d=0, status=true
+doxa>   Goodbye.

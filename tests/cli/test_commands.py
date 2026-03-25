@@ -1,30 +1,30 @@
 import json
 import sys
-
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 from pydantic import ValidationError
 
 from doxa.cli.commands import (
-    cmd_dump,
-    cmd_info,
-    cmd_schema,
-    cmd_load,
-    cmd_unload,
-    cmd_search,
-    cmd_exit,
-    dispatch,
-    _load_file,
-    _auto_fix_kinds,
-    _branch_to_doxa,
-    _branch_to_dict,
-    _parse_dump_args,
     HELP_TEXT,
+    _auto_fix_kinds,
+    _branch_to_dict,
+    _branch_to_doxa,
+    _load_file,
+    _parse_dump_args,
+    cmd_dump,
+    cmd_exit,
+    cmd_info,
+    cmd_load,
+    cmd_schema,
+    cmd_search,
+    cmd_unload,
+    dispatch,
 )
 from doxa.cli.terminal import TerminalState
-from doxa.core.branch import Branch
 from doxa.core.base_kinds import BaseKind
+from doxa.core.branch import Branch
 
 
 @pytest.fixture
@@ -88,25 +88,25 @@ def test_parse_dump_args_multiple_flags() -> None:
 def test_branch_to_doxa(mock_state: TerminalState) -> None:
     result = _branch_to_doxa(mock_state)
 
-    assert "person(alice)." in result
-    assert "person(bob)." in result
-    assert "parent(alice, bob)." in result
-    assert "ancestor(X, Y) :- parent(X, Y)." in result
-    assert "!:- ancestor(X, X)." in result
+    assert "person(alice)" in result
+    assert "person(bob)" in result
+    assert "parent(alice, bob)" in result
+    assert "ancestor(X, Y) :- parent(X, Y)" in result
+    assert "!:- ancestor(X, X)" in result
 
 
 def test_branch_to_doxa_no_predicates(mock_state: TerminalState) -> None:
     result = _branch_to_doxa(mock_state, predicates=False)
 
     assert "pred person/1" not in result
-    assert "person(alice)." in result
+    assert "person(alice)" in result
 
 
 def test_branch_to_doxa_no_belief_records(mock_state: TerminalState) -> None:
     result = _branch_to_doxa(mock_state, belief_records=False)
 
-    assert "person(alice)." not in result
-    assert "ancestor(X, Y) :- parent(X, Y)." in result
+    assert "person(alice)" not in result
+    assert "ancestor(X, Y) :- parent(X, Y)" in result
 
 
 def test_branch_to_dict(mock_state: TerminalState) -> None:
@@ -127,8 +127,8 @@ def test_cmd_dump_ax_format(mock_state: TerminalState, capsys) -> None:
     cmd_dump(mock_state, ["--ax"])
 
     captured = capsys.readouterr()
-    assert "person(alice)." in captured.out
-    assert "ancestor(X, Y) :- parent(X, Y)." in captured.out
+    assert "person(alice)" in captured.out
+    assert "ancestor(X, Y) :- parent(X, Y)" in captured.out
 
 
 def test_cmd_dump_json_format(mock_state: TerminalState, capsys) -> None:
@@ -149,7 +149,7 @@ def test_cmd_dump_to_file(mock_state: TerminalState, tmp_path: Path, capsys) -> 
 
     assert output_file.exists()
     content = output_file.read_text()
-    assert "person(alice)." in content
+    assert "person(alice)" in content
 
     captured = capsys.readouterr()
     assert "Dumped to" in captured.out

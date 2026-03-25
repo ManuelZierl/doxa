@@ -1,0 +1,13 @@
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: X='a' | b=1, d=0, status=true
+  2: X='b' | b=1, d=0, status=true
+doxa>   Unloaded predicate p/1: 1 declaration(s), 2 fact(s), 0 rule(s) removed.
+doxa>   No results.
+doxa>   1: V=1, X='a' | b=1, d=0, status=true
+  2: V=2, X='b' | b=1, d=0, status=true
+doxa>   Goodbye.

@@ -1,0 +1,5 @@
+doxa>   Added: 1 predicate(s)
+doxa>   1: X='zeus' | b=1, d=0, status=true
+doxa>   No results.
+doxa>   1: b=0, d=0, status=neither
+doxa>   Goodbye.

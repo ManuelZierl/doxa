@@ -12,8 +12,8 @@ fixture requires only dropping two files in a new folder.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
@@ -50,12 +50,15 @@ def _normalise(text: str) -> str:
 def _collect_fixtures() -> list[tuple[str, Path]]:
     if not FIXTURES_DIR.exists():
         return []
-    dirs = sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir())
-    return [
-        (d.name, d)
-        for d in dirs
-        if (d / "input.doxa").exists() and (d / "expected.txt").exists()
-    ]
+    results = []
+    for category in sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir()):
+        for fixture in sorted(p for p in category.iterdir() if p.is_dir()):
+            if (fixture / "input.doxa").exists() and (
+                fixture / "expected.txt"
+            ).exists():
+                label = f"{category.name}/{fixture.name}"
+                results.append((label, fixture))
+    return results
 
 
 @pytest.mark.parametrize(
@@ -85,6 +88,6 @@ def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
     actual = _normalise(_strip_banner(captured.out))
     expected = _normalise(expected_raw)
 
-    assert (
-        actual == expected
-    ), f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
+    assert actual == expected, (
+        f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
+    )

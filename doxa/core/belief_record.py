@@ -2,17 +2,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Literal, List, Annotated, Union, Dict
+from typing import Annotated, Dict, List, Literal, Union
 
 from pydantic import Field, model_validator
 
-from doxa.core.annotate_mixin import AnnotateMixin
-from doxa.core.audit_mixin import AuditMixin
-from doxa.core.base import Base
-from doxa.core.base_kinds import BaseKind
-from doxa.core.entity import Entity
-from doxa.core.literal_type import LiteralType
-from doxa.core.term_kinds import TermKind
 from doxa.core._parsing.annotation_utils import (
     extract_annotation_kwargs,
     is_default_annotation,
@@ -21,10 +14,16 @@ from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_int_regex,
     parse_python_string_literal,
-    render_string_literal,
     split_annotation_suffix,
     split_top_level,
 )
+from doxa.core.annotate_mixin import AnnotateMixin
+from doxa.core.audit_mixin import AuditMixin
+from doxa.core.base import Base
+from doxa.core.base_kinds import BaseKind
+from doxa.core.entity import Entity
+from doxa.core.literal_type import LiteralType
+from doxa.core.term_kinds import TermKind
 
 _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()

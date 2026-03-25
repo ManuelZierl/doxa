@@ -1,16 +1,16 @@
 from unittest.mock import MagicMock, patch
 
 from doxa.cli.terminal import (
-    run_terminal,
     TerminalState,
-    _make_empty_branch,
+    _add_to_branch,
     _collect_statement,
     _handle_statement,
+    _make_empty_branch,
     _run_query,
-    _add_to_branch,
+    run_terminal,
 )
-from doxa.core.branch import Branch
 from doxa.core.base_kinds import BaseKind
+from doxa.core.branch import Branch
 
 
 def test_make_empty_branch() -> None:
@@ -133,8 +133,7 @@ def test_run_query(capsys) -> None:
     branch = Branch.from_doxa("person(alice). person(bob).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
-    mock_result.success = True
-    mock_result.bindings = []
+    mock_result.answers = []
     mock_engine.evaluate.return_value = mock_result
 
     state = TerminalState(
@@ -154,10 +153,11 @@ def test_run_query_with_results(capsys) -> None:
     branch = Branch.from_doxa("person(alice). person(bob).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
-    mock_result.success = True
-    mock_binding = MagicMock()
-    mock_binding.values = {"X": "alice"}
-    mock_result.bindings = [mock_binding]
+    mock_answer = MagicMock()
+    mock_answer.bindings = {"X": "alice"}
+    mock_answer.b = 1.0
+    mock_answer.d = 0.0
+    mock_result.answers = [mock_answer]
     mock_engine.evaluate.return_value = mock_result
 
     state = TerminalState(
@@ -178,8 +178,7 @@ def test_run_query_no_results(capsys) -> None:
     branch = Branch.from_doxa("person(alice).")
     mock_engine = MagicMock()
     mock_result = MagicMock()
-    mock_result.success = False
-    mock_result.bindings = []
+    mock_result.answers = []
     mock_engine.evaluate.return_value = mock_result
 
     state = TerminalState(
