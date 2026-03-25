@@ -25,7 +25,7 @@ Usage::
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from doxa.core.branch import Branch
 from doxa.core.query import Query
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 # We reuse *all* internal helpers so that results are bit-identical.
 # ---------------------------------------------------------------------------
 
-from doxa.core.belief_record import BeliefRecord
 from doxa.core.epistemic_semantics import (
     BelnapStatusSemantics,
     BodyFalsitySemantics,

@@ -733,10 +733,7 @@ def _positive_atom_evidence(
 
     # Memoisation hit (ground atoms only)
     if is_ground and call_key in ctx.memo:
-        return [
-            _EvidenceRow(subst=subst, b=b, d=d)
-            for b, d in ctx.memo[call_key]
-        ]
+        return [_EvidenceRow(subst=subst, b=b, d=d) for b, d in ctx.memo[call_key]]
 
     ctx.in_progress.add(call_key)
 

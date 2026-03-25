@@ -147,7 +147,8 @@ class AtomGoal(GoalBase):
 class AssumeGoal(GoalBase):
     goal_kind: Literal[GoalKind.assume] = Field(GoalKind.assume)
     assumptions: List["AtomGoal"] = Field(
-        ..., description="List of ground atom goals treated as temporary facts.",
+        ...,
+        description="List of ground atom goals treated as temporary facts.",
     )
 
     def to_doxa(self) -> str:
@@ -163,7 +164,7 @@ class AssumeGoal(GoalBase):
         if not s.startswith("assume(") or not s.endswith(")"):
             raise ValueError(f"Invalid assume goal syntax: {inp!r}")
 
-        inner = s[len("assume("):-1].strip()
+        inner = s[len("assume(") : -1].strip()
         if not inner:
             raise ValueError("assume() must contain at least one assumption.")
 

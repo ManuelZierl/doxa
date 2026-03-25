@@ -91,9 +91,7 @@ check_value(X, V) :- has_value(X, V), geq(V, 100).
     branch = Branch.from_doxa(kb_text)
     engine = InMemoryQueryEngine()
 
-    query = Query.from_doxa(
-        "?- assume(has_value(item1, 150)), check_value(item1, V)"
-    )
+    query = Query.from_doxa("?- assume(has_value(item1, 150)), check_value(item1, V)")
     results = engine.evaluate(branch, query)
 
     assert len(results.answers) == 1
@@ -278,9 +276,7 @@ has_employee_count(company_b, 3000).
 
 def test_assume_parsing_roundtrip():
     """Test that assume(...) can be parsed and serialized back to doxa."""
-    query = Query.from_doxa(
-        "?- assume(p(a, 1), q(b)), r(X)"
-    )
+    query = Query.from_doxa("?- assume(p(a, 1), q(b)), r(X)")
 
     assert len(query.goals) == 2  # assume goal + r(X)
 
@@ -307,9 +303,7 @@ pending_approval(X) :- registered(X), not approved(X).
     engine = InMemoryQueryEngine()
 
     # Assume company is registered but NOT approved
-    query = Query.from_doxa(
-        "?- assume(registered(acme)), pending_approval(X)"
-    )
+    query = Query.from_doxa("?- assume(registered(acme)), pending_approval(X)")
     results = engine.evaluate(branch, query)
 
     assert len(results.answers) == 1
@@ -336,9 +330,7 @@ score(alice, 80).
     engine = InMemoryQueryEngine()
 
     # Assume an additional fact
-    query = Query.from_doxa(
-        "?- assume(score(bob, 90)), score(X, Y)"
-    )
+    query = Query.from_doxa("?- assume(score(bob, 90)), score(X, Y)")
     results = engine.evaluate(branch, query)
 
     names = {b.bindings["X"] for b in results.answers}

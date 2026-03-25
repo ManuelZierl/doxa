@@ -88,6 +88,6 @@ def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
     actual = _normalise(_strip_banner(captured.out))
     expected = _normalise(expected_raw)
 
-    assert (
-        actual == expected
-    ), f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
+    assert actual == expected, (
+        f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
+    )

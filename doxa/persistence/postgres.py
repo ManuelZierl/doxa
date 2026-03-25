@@ -17,7 +17,7 @@ Two tables are created automatically on first use:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional
 
 from doxa.core.belief_record import BeliefRecord
 from doxa.core.branch import Branch
@@ -137,9 +137,7 @@ class PostgresBranchRepository(BranchRepository):
 
     def get(self, name: str) -> Optional[Branch]:
         with self._conn.cursor() as cur:
-            cur.execute(
-                "SELECT data FROM doxa_branches WHERE name = %s", (name,)
-            )
+            cur.execute("SELECT data FROM doxa_branches WHERE name = %s", (name,))
             row = cur.fetchone()
             if row is None:
                 return None
@@ -181,17 +179,19 @@ class PostgresBranchRepository(BranchRepository):
                 args = []
                 for rec in branch.belief_records:
                     rec_data = rec.model_dump(mode="json")
-                    args.append((
-                        branch.name,
-                        rec.pred_name,
-                        rec.pred_arity,
-                        _utc(rec.et),
-                        _utc(rec.vf) if rec.vf is not None else None,
-                        _utc(rec.vt) if rec.vt is not None else None,
-                        rec.b,
-                        rec.d,
-                        Jsonb(rec_data),
-                    ))
+                    args.append(
+                        (
+                            branch.name,
+                            rec.pred_name,
+                            rec.pred_arity,
+                            _utc(rec.et),
+                            _utc(rec.vf) if rec.vf is not None else None,
+                            _utc(rec.vt) if rec.vt is not None else None,
+                            rec.b,
+                            rec.d,
+                            Jsonb(rec_data),
+                        )
+                    )
 
                 cur.executemany(
                     """
@@ -232,10 +232,7 @@ class PostgresBranchRepository(BranchRepository):
             clauses.append("pred_name = %s")
             params.append(pred_name)
 
-        sql = (
-            "SELECT data FROM doxa_belief_records WHERE "
-            + " AND ".join(clauses)
-        )
+        sql = "SELECT data FROM doxa_belief_records WHERE " + " AND ".join(clauses)
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
             return [BeliefRecord.model_validate(row[0]) for row in cur.fetchall()]
@@ -256,7 +253,7 @@ class PostgresBranchRepository(BranchRepository):
         """
         clauses = [
             "branch_name = %s",
-            "et <= %s",             # knowledge-time cutoff
+            "et <= %s",  # knowledge-time cutoff
             "(vf IS NULL OR vf <= %s)",  # validity-from check
             "(vt IS NULL OR vt >= %s)",  # validity-to check
         ]
@@ -270,10 +267,7 @@ class PostgresBranchRepository(BranchRepository):
             clauses.append("pred_arity = %s")
             params.append(pred_arity)
 
-        sql = (
-            "SELECT data FROM doxa_belief_records WHERE "
-            + " AND ".join(clauses)
-        )
+        sql = "SELECT data FROM doxa_belief_records WHERE " + " AND ".join(clauses)
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
             return [BeliefRecord.model_validate(row[0]) for row in cur.fetchall()]
@@ -344,8 +338,16 @@ def connect_postgres(
 
     All tables and indexes are created automatically on first connection.
     """
-    connect_kwargs = {k: v for k, v in dict(
-        host=host, port=port, dbname=dbname, user=user, password=password,
-    ).items() if v is not None}
+    connect_kwargs = {
+        k: v
+        for k, v in dict(
+            host=host,
+            port=port,
+            dbname=dbname,
+            user=user,
+            password=password,
+        ).items()
+        if v is not None
+    }
     connect_kwargs.update(kwargs)
     return PostgresBranchRepository(conninfo, **connect_kwargs)
