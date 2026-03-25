@@ -43,18 +43,20 @@ def _make_repo(memory_kind: str):
         raise click.ClickException(f"Unknown memory backend: {memory_kind!r}")
 
 
-def _make_engine(engine_kind: str):
+def _make_engine(engine_kind: str, repo=None):
     if engine_kind == "memory":
         from doxa.query.memory import InMemoryQueryEngine
 
         return InMemoryQueryEngine()
     elif engine_kind == "postgres":
-        import os
-
         from doxa.query.postgres import PostgresQueryEngine
 
-        db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
-        return PostgresQueryEngine(db_url)
+        if repo is None:
+            raise click.ClickException(
+                "PostgresQueryEngine requires a PostgresBranchRepository. "
+                "Use --memory postgres to create one automatically."
+            )
+        return PostgresQueryEngine(repo)
     else:
         raise click.ClickException(f"Unknown query engine: {engine_kind!r}")
 
@@ -139,7 +141,7 @@ def cli(
         raise click.ClickException(f"Could not initialize memory backend: {exc}")
 
     try:
-        engine = _make_engine(engine_kind)
+        engine = _make_engine(engine_kind, repo=repo)
     except NotImplementedError:
         raise click.ClickException(
             f"Query engine {engine_kind!r} is not yet implemented."

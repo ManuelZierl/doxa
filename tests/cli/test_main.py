@@ -203,21 +203,19 @@ def test_make_engine_memory() -> None:
 
 
 def test_make_engine_postgres() -> None:
-    with patch.dict("os.environ", {"DOXA_POSTGRES_URL": "postgresql://localhost/test"}):
-        with patch("doxa.query.postgres.PostgresQueryEngine") as mock_postgres:
-            mock_postgres.return_value = MagicMock()
-            _make_engine("postgres")
+    mock_repo = MagicMock()
+    with patch("doxa.query.postgres.PostgresQueryEngine") as mock_postgres:
+        mock_postgres.return_value = MagicMock()
+        _make_engine("postgres", repo=mock_repo)
 
-            mock_postgres.assert_called_once_with("postgresql://localhost/test")
+        mock_postgres.assert_called_once_with(mock_repo)
 
 
-def test_make_engine_postgres_default_url() -> None:
-    with patch.dict("os.environ", {}, clear=True):
-        with patch("doxa.query.postgres.PostgresQueryEngine") as mock_postgres:
-            mock_postgres.return_value = MagicMock()
-            _make_engine("postgres")
+def test_make_engine_postgres_no_repo() -> None:
+    from click import ClickException
 
-            mock_postgres.assert_called_once_with("postgresql://localhost/doxa")
+    with pytest.raises(ClickException, match="requires a PostgresBranchRepository"):
+        _make_engine("postgres")
 
 
 def test_make_engine_unknown() -> None:

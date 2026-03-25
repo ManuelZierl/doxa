@@ -1,5 +1,5 @@
 pred parent/2.
 ancestor(X, Y) :- parent(X, Y).
-?- parent(zeus, heracles), ancestor(X, heracles).
+?- assume(parent(zeus, heracles)), ancestor(X, heracles).
 ?- ancestor(X, heracles).
 /-exit

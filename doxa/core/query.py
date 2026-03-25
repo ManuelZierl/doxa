@@ -14,7 +14,7 @@ from doxa.core.epistemic_semantics import (
     DEFAULT_EPISTEMIC_SEMANTICS,
     EpistemicSemanticsConfig,
 )
-from doxa.core.goal import Goal, goal_from_doxa
+from doxa.core.goal import AssumeGoal, Goal, goal_from_doxa
 from doxa.core.schema_utils import compact_schema_for_llm
 
 
@@ -235,7 +235,29 @@ class Query(Base):
             goal = goal_from_doxa(part)
 
             # Rename anonymous variables (_) to unique names (_0, _1, _2, …)
-            if hasattr(goal, "goal_args"):
+            if isinstance(goal, AssumeGoal):
+                updated_assumptions = []
+                for assumption in goal.assumptions:
+                    updated_args = []
+                    for arg in assumption.goal_args:
+                        if hasattr(arg, "var") and arg.var.name == "_":
+                            unique_name = f"_{anon_counter}"
+                            anon_counter += 1
+                            updated_arg = arg.model_copy(
+                                update={
+                                    "var": arg.var.model_copy(
+                                        update={"name": unique_name}
+                                    )
+                                }
+                            )
+                            updated_args.append(updated_arg)
+                        else:
+                            updated_args.append(arg)
+                    updated_assumptions.append(
+                        assumption.model_copy(update={"goal_args": updated_args})
+                    )
+                goal = goal.model_copy(update={"assumptions": updated_assumptions})
+            elif hasattr(goal, "goal_args"):
                 updated_args = []
                 for arg in goal.goal_args:
                     if hasattr(arg, "var") and arg.var.name == "_":

@@ -15,6 +15,7 @@ from doxa.core.builtins import Builtin
 from doxa.core.constraint import Constraint
 from doxa.core.entity import Entity
 from doxa.core.goal import (
+    AssumeGoal,
     AtomGoal,
     BuiltinGoal,
     EntityArg,
@@ -72,6 +73,7 @@ __all__ = [
     "RuleGoalLiteralArg",
     "Goal",
     "GoalBase",
+    "AssumeGoal",
     "AtomGoal",
     "BuiltinGoal",
     "GoalArg",

@@ -149,10 +149,33 @@ A query answer contains:
 * answer-level `d`
 * a derived Belnap status
 
-### Inline Query Assumptions
-In multi-goal queries, a fully ground atom goal may act as a temporary inline assumption for that query evaluation.
-Inline assumptions do not modify the branch and are not persisted.
-Single-goal queries do not silently inject missing assumptions.
+### Hypothetical Assumptions (`assume`)
+
+The `assume(...)` goal is query-only syntax that injects temporary facts into the evaluation context for the duration of that query. Assumed facts are not persisted to the branch.
+
+```doxa
+?- assume(fact1, fact2, ...), goal1, goal2, ...
+```
+
+Examples:
+
+```doxa
+?- assume(employees(nordwind, 450), company(nordwind), turnover_mio(nordwind, 55)),
+   out_of_scope_under_current_csrd(nordwind).
+
+?- assume(has_employee_count(my_company, 1200), has_net_turnover(my_company, 500000000)),
+   subject_to_due_diligence(lksg, my_company, Year).
+```
+
+Rules:
+
+* `assume(...)` is valid only in queries, not in rules, constraints, or `.doxa` files.
+* Each argument inside `assume(...)` must be a valid atom goal (same syntax as a fact).
+* Assumed facts are injected with `b=1.0, d=0.0` before the rest of the query is evaluated.
+* Assumed facts are temporary and do not modify the branch or persist after query evaluation.
+* `assume(...)` works identically for ground and open queries.
+* Variables inside `assume(...)` that remain unbound are silently skipped (the assumption is incomplete and cannot be injected).
+* Multiple `assume(...)` goals in the same query are allowed; all are injected before solving begins.
 
 ## Annotation Keys
 

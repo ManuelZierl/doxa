@@ -638,45 +638,45 @@ def test_explain_false_disables_explain_collection():
 
 
 # ---------------------------------------------------------------------------
-# Inline assumptions / skolemization
+# Explicit assume(...)
 # ---------------------------------------------------------------------------
 
 
-def test_skolemized_inline_assumption_bridges_edb_goal_to_idb_goal():
+def test_assume_bridges_edb_goal_to_idb_goal():
     result = run(
         """
         chosen(X) :- edge(root, X).
         """,
-        "?- edge(root, X), chosen(X)",
-    )
-
-    answer = assert_single_answer(result)
-    assert answer.bindings == {"X": "_hyp_X"}
-    assert answer.b == pytest.approx(1.0)
-    assert answer.d == pytest.approx(0.0)
-    assert answer.belnap_status is BelnapStatus.true
-
-
-def test_existing_visible_facts_prevent_inline_assumption_injection():
-    result = run(
-        """
-        edge(root, a).
-        chosen(X) :- edge(root, X).
-        """,
-        "?- edge(root, X), chosen(X)",
+        "?- assume(edge(root, a)), chosen(X)",
     )
 
     answer = assert_single_answer(result)
     assert answer.bindings == {"X": "a"}
     assert answer.b == pytest.approx(1.0)
     assert answer.d == pytest.approx(0.0)
+    assert answer.belnap_status is BelnapStatus.true
 
 
-def test_single_goal_query_does_not_inline_assume_missing_edb_fact():
+def test_assume_coexists_with_existing_facts():
+    result = run(
+        """
+        edge(root, a).
+        chosen(X) :- edge(root, X).
+        """,
+        "?- assume(edge(root, b)), chosen(X)",
+    )
+
+    # Both the KB fact (a) and the assumed fact (b) should be available
+    assert len(result.answers) == 2
+    xs = {a.bindings["X"] for a in result.answers}
+    assert xs == {"a", "b"}
+
+
+def test_bare_edb_goal_without_assume_does_not_inject():
     result = run(
         "",
         "?- edge(root, X)",
     )
 
-    # Important: assumption injection is deliberately disabled for single-goal queries.
+    # Without assume(...), bare EDB goals against an empty KB yield no results.
     assert result.answers == ()

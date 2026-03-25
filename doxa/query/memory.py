@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import operator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -38,7 +38,7 @@ from doxa.core.epistemic_semantics import (
     RulePropagationSemantics,
     SupportAggregationSemantics,
 )
-from doxa.core.goal import AtomGoal, BuiltinGoal, VarArg
+from doxa.core.goal import AssumeGoal, AtomGoal, BuiltinGoal, VarArg
 from doxa.core.query import Query, QueryFocus
 from doxa.core.rule import Rule, RuleAtomGoal, RuleBuiltinGoal
 from doxa.query.engine import (
@@ -94,7 +94,12 @@ class _BuiltinGoal:
     args: Tuple[_Term, ...]
 
 
-_Goal = Union[_Atom, _BuiltinGoal]
+@dataclass(frozen=True)
+class _AssumeGoal:
+    atoms: Tuple[_Atom, ...]
+
+
+_Goal = Union[_Atom, _BuiltinGoal, _AssumeGoal]
 
 
 @dataclass(frozen=True)
@@ -111,6 +116,13 @@ class _EvidenceRow:
 
 
 GroundAtomKey = Tuple[str, Tuple[Any, ...]]
+
+# Sentinel for unbound argument positions in call-pattern keys.
+_FREE: Any = "__doxa_free__"
+
+# A call-pattern key captures the predicate name and the resolved argument
+# values (ground values kept as-is, unbound positions replaced by _FREE).
+CallPatternKey = Tuple[str, Tuple[Any, ...]]
 
 
 @dataclass(frozen=True)
@@ -145,6 +157,12 @@ class _Context:
     effective_known_at: datetime
     max_depth: int
     explain_enabled: bool
+    # Tabling: memoisation + cycle detection.
+    # ``memo`` caches results for fully-ground atoms only.
+    # ``in_progress`` tracks call patterns (ground AND non-ground) currently
+    # on the DFS call stack so that recursive cycles are broken immediately.
+    memo: Dict[GroundAtomKey, List[Tuple[float, float]]] = field(default_factory=dict)
+    in_progress: Set[CallPatternKey] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +216,18 @@ def _prefixed_term(arg: Any, prefix: str) -> _Term:
 def _compile_query_goals(query: Query) -> List[_Goal]:
     out: List[_Goal] = []
     for g in query.goals:
-        if isinstance(g, AtomGoal):
+        if isinstance(g, AssumeGoal):
+            compiled_atoms: List[_Atom] = []
+            for assumption in g.assumptions:
+                compiled_atoms.append(
+                    _Atom(
+                        pred=assumption.pred_name,
+                        negated=assumption.negated,
+                        args=tuple(_term(a) for a in assumption.goal_args),
+                    )
+                )
+            out.append(_AssumeGoal(atoms=tuple(compiled_atoms)))
+        elif isinstance(g, AtomGoal):
             out.append(
                 _Atom(
                     pred=g.pred_name,
@@ -690,6 +719,28 @@ def _positive_atom_evidence(
     if depth > ctx.max_depth:
         return []
 
+    # --- Tabling: resolve args to build call-pattern key --------------------
+    resolved = tuple(_resolve(a, subst) for a in goal.args)
+    is_ground = all(v is not None for v in resolved)
+    call_key: CallPatternKey = (
+        goal.pred,
+        tuple(v if v is not None else _FREE for v in resolved),
+    )
+
+    # Cycle detection (ground AND non-ground call patterns)
+    if call_key in ctx.in_progress:
+        return []
+
+    # Memoisation hit (ground atoms only)
+    if is_ground and call_key in ctx.memo:
+        return [
+            _EvidenceRow(subst=subst, b=b, d=d)
+            for b, d in ctx.memo[call_key]
+        ]
+
+    ctx.in_progress.add(call_key)
+
+    # --- Normal evaluation -------------------------------------------------
     rows: List[_EvidenceRow] = []
 
     # facts
@@ -792,7 +843,14 @@ def _positive_atom_evidence(
 
             rows.append(_EvidenceRow(subst=result_subst, b=b, d=d))
 
-    return _aggregate_evidence_rows(rows, ctx.query)
+    result = _aggregate_evidence_rows(rows, ctx.query)
+
+    # --- Tabling: cache result and clear in-progress flag ------------------
+    ctx.in_progress.discard(call_key)
+    if is_ground:
+        ctx.memo[call_key] = [(r.b, r.d) for r in result]
+
+    return result
 
 
 def _positive_atom_truth_rows(
@@ -919,6 +977,23 @@ def _solve_body_truth(
     goal = goals[0]
     rest = goals[1:]
 
+    if isinstance(goal, _AssumeGoal):
+        # assume(...) always succeeds — it just injects temporary facts.
+        # The actual injection is done before solving begins (in _evaluate).
+        # At solve time, assume goals are a no-op pass-through.
+        yield from _solve_body_truth(
+            rest,
+            subst,
+            ctx,
+            collector,
+            depth,
+            current_support,
+            current_falsity,
+            current_atoms,
+            apply_constraints,
+        )
+        return
+
     if isinstance(goal, _BuiltinGoal):
         for new_subst in _eval_builtin(goal, subst):
             yield from _solve_body_truth(
@@ -999,10 +1074,16 @@ def _solve_body_truth(
 def _query_var_names(query: Query) -> Set[str]:
     names: Set[str] = set()
     for goal in query.goals:
-        args = getattr(goal, "goal_args", [])
-        for arg in args:
-            if isinstance(arg, VarArg):
-                names.add(arg.var.name)
+        if isinstance(goal, AssumeGoal):
+            for assumption in goal.assumptions:
+                for arg in assumption.goal_args:
+                    if isinstance(arg, VarArg):
+                        names.add(arg.var.name)
+        else:
+            args = getattr(goal, "goal_args", [])
+            for arg in args:
+                if isinstance(arg, VarArg):
+                    names.add(arg.var.name)
     return names - query.anon_vars
 
 
@@ -1012,35 +1093,71 @@ def _project_bindings(
     return {k: v for k, v in subst.items() if k in vars_to_keep}
 
 
-def _should_inline_assume_goal(
-    goal: _Goal,
-    *,
+def _inject_assume_facts(
     compiled_goals: Sequence[_Goal],
     fact_index: Dict[Tuple[str, int], List[BeliefRecord]],
-    idb_preds: Set[str],
-    query_vars: Set[str],
-) -> bool:
-    if not isinstance(goal, _Atom):
-        return False
-    if goal.negated:
-        return False
-    if goal.pred in idb_preds:
-        return False
-    if not all(isinstance(arg, _GroundTerm) for arg in goal.args):
-        return False
+    subst: Subst,
+) -> None:
+    """Inject temporary BeliefRecords for all explicit assume(...) goals.
 
-    # Conservative: only allow implicit hypotheticals in exploratory queries
-    if not query_vars:
-        return False
-    if len(compiled_goals) <= 1:
-        return False
+    Mutates *fact_index* in place.  Only ground arguments (after applying
+    *subst*) are injected; variable positions that remain unbound are
+    silently skipped (the assumption is incomplete and cannot be injected).
+    """
+    from doxa.core.base_kinds import BaseKind
 
-    # Conservative: if this predicate already has visible facts,
-    # do not silently inject new hypothetical facts.
-    if (goal.pred, len(goal.args)) in fact_index:
-        return False
+    for goal in compiled_goals:
+        if not isinstance(goal, _AssumeGoal):
+            continue
+        for atom in goal.atoms:
+            belief_args: list[BeliefArg] = []
+            all_ground = True
+            for arg in atom.args:
+                val = _resolve(arg, subst)
+                if val is None:
+                    all_ground = False
+                    break
+                if isinstance(val, int):
+                    belief_args.append(
+                        BeliefLiteralArg(
+                            kind=BaseKind.belief_arg,
+                            term_kind=TermKind.lit,
+                            lit_type=LiteralType.int,
+                            value=val,
+                        )
+                    )
+                elif isinstance(val, float):
+                    belief_args.append(
+                        BeliefLiteralArg(
+                            kind=BaseKind.belief_arg,
+                            term_kind=TermKind.lit,
+                            lit_type=LiteralType.float,
+                            value=val,
+                        )
+                    )
+                else:
+                    belief_args.append(
+                        BeliefEntityArg(
+                            kind=BaseKind.belief_arg,
+                            term_kind="ent",
+                            ent_name=str(val),
+                        )
+                    )
 
-    return True
+            if not all_ground:
+                continue
+
+            rec = BeliefRecord(
+                kind=BaseKind.belief_record,
+                created_at=datetime.now(timezone.utc),
+                pred_name=atom.pred,
+                pred_arity=len(atom.args),
+                args=belief_args,
+                b=1.0,
+                d=0.0,
+            )
+            key = (rec.pred_name, rec.pred_arity)
+            fact_index.setdefault(key, []).append(rec)
 
 
 def _aggregate_answers_from_evidence(
@@ -1219,125 +1336,10 @@ class InMemoryQueryEngine(QueryEngine):
         compiled_goals = _compile_query_goals(query)
         query_vars = _query_var_names(query)
 
-        # ── Skolemize bridging variables ──────────────────────────────────────
-        # A variable is skolemized when it appears in:
-        #   1. A non-negated EDB assumption-candidate goal (EDB pred, >=1 ground arg)
-        #   2. At least one IDB goal (predicate has rules)
-        # This allows hypothetical facts to be connected through rule derivations.
-        idb_preds: Set[str] = {r.head_pred_name for r in branch.rules}
+        # ── Inject explicit assume(...) facts ────────────────────────────────
+        _inject_assume_facts(compiled_goals, fact_index, {})
 
-        vars_in_edb_assumptions: Set[str] = set()
-        for goal in compiled_goals:
-            if (
-                isinstance(goal, _Atom)
-                and not goal.negated
-                and goal.pred not in idb_preds
-            ):
-                # Only treat as a Skolemization candidate when the predicate has NO
-                # existing facts.  If facts are present, normal resolution handles
-                # the goal; Skolemizing the variable would replace it with a synthetic
-                # entity name throughout the query and break fact lookups for all other
-                # goals that share the same variable.
-                if (goal.pred, len(goal.args)) not in fact_index:
-                    if any(isinstance(a, _GroundTerm) for a in goal.args):
-                        for a in goal.args:
-                            if isinstance(a, _VarTerm):
-                                vars_in_edb_assumptions.add(a.name)
-
-        vars_in_idb_goals: Set[str] = set()
-        for goal in compiled_goals:
-            if isinstance(goal, _Atom) and goal.pred in idb_preds:
-                for a in goal.args:
-                    if isinstance(a, _VarTerm):
-                        vars_in_idb_goals.add(a.name)
-
-        skolem_map: Dict[str, str] = {
-            v: f"_hyp_{v}" for v in vars_in_edb_assumptions & vars_in_idb_goals
-        }
-
-        if skolem_map:
-            new_goals: List[_Goal] = []
-            for goal in compiled_goals:
-                if isinstance(goal, _Atom):
-                    new_args = tuple(
-                        _GroundTerm(skolem_map[a.name])
-                        if isinstance(a, _VarTerm) and a.name in skolem_map
-                        else a
-                        for a in goal.args
-                    )
-                    new_goals.append(
-                        _Atom(pred=goal.pred, negated=goal.negated, args=new_args)
-                    )
-                elif isinstance(goal, _BuiltinGoal):
-                    new_args = tuple(
-                        _GroundTerm(skolem_map[a.name])
-                        if isinstance(a, _VarTerm) and a.name in skolem_map
-                        else a
-                        for a in goal.args
-                    )
-                    new_goals.append(_BuiltinGoal(op=goal.op, args=new_args))
-                else:
-                    new_goals.append(goal)
-            compiled_goals = new_goals
-
-        # ── Inline assumptions ────────────────────────────────────────────────
-        # Fully-ground positive EDB atom goals become temporary facts with
-        # b=1.0, d=0.0.  Only EDB predicates (no rules) are eligible.
-        for goal in compiled_goals:
-            if _should_inline_assume_goal(
-                goal,
-                compiled_goals=compiled_goals,
-                fact_index=fact_index,
-                idb_preds=idb_preds,
-                query_vars=query_vars,
-            ):
-                from doxa.core.base_kinds import BaseKind
-
-                belief_args = []
-                for arg in goal.args:
-                    assert isinstance(arg, _GroundTerm)
-                    val = arg.value
-                    if isinstance(val, int):
-                        belief_args.append(
-                            BeliefLiteralArg(
-                                kind=BaseKind.belief_arg,
-                                term_kind=TermKind.lit,
-                                lit_type=LiteralType.int,
-                                value=val,
-                            )
-                        )
-                    elif isinstance(val, float):
-                        belief_args.append(
-                            BeliefLiteralArg(
-                                kind=BaseKind.belief_arg,
-                                term_kind=TermKind.lit,
-                                lit_type=LiteralType.float,
-                                value=val,
-                            )
-                        )
-                    else:
-                        belief_args.append(
-                            BeliefEntityArg(
-                                kind=BaseKind.belief_arg,
-                                term_kind="ent",
-                                ent_name=str(val),
-                            )
-                        )
-
-                rec = BeliefRecord(
-                    kind=BaseKind.belief_record,
-                    created_at=datetime.now(timezone.utc),
-                    pred_name=goal.pred,
-                    pred_arity=len(goal.args),
-                    args=belief_args,
-                    b=1.0,
-                    d=0.0,
-                )
-                key = (rec.pred_name, rec.pred_arity)
-                fact_index.setdefault(key, []).append(rec)
-
-        # Seed substitution with Skolem bindings so they appear in results
-        initial_subst: Subst = {var: skolem for var, skolem in skolem_map.items()}
+        initial_subst: Subst = {}
 
         ctx = _Context(
             fact_index=fact_index,
