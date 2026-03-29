@@ -29,11 +29,17 @@ Compound terms are forbidden. For example, `foo(bar(X))` is a syntax error; intr
 
 ## Statements
 
-### 1. Predicate Declaration
+### 1. Predicate Declaration (optional built-in template sugar)
 
 ```doxa
 pred name/arity [type_list] [@{description:"..."}].
 ```
+
+`pred` is **optional** built-in template sugar for schema and documentation. Predicates may always be introduced implicitly by facts, rules, or constraints — no prior `pred` declaration is required.
+
+A statement such as `parent(alice, bob).` is always valid even if no `pred parent/2.` appears anywhere. The parser auto-creates predicates as statements are parsed.
+
+`pred` declarations may appear before or after ordinary usage of the predicate. Their purpose is to attach metadata (description, type list) and to generate type-checking constraints. A bare `pred foo/2.` has no runtime effect beyond registering schema/metadata presence.
 
 Examples:
 
@@ -46,6 +52,9 @@ pred euro_value/2 [entity, int].
 
 Rules:
 
+* `pred` is optional; predicates are auto-created when first used in a fact, rule, or constraint.
+* `pred` declarations may appear before or after the predicate is first used.
+* Duplicate `pred` declarations for the same name/arity are a hard error.
 * `description` is the only annotation key accepted on `pred`. Any other annotation key is a hard error.
 * `arity` must be at least 1.
 * If a `type_list` is provided, its length must match the predicate arity.
@@ -67,11 +76,6 @@ pred employee/2.
 !:- employee(X0, X1), not company(X0).
 !:- employee(X0, X1), not person(X1).
 ```
-
-Current parser behavior:
-
-* Predicate declarations are recommended for schema and documentation.
-* The current parser also accepts undeclared predicate usage and auto-creates predicates as statements are parsed.
 
 ### 2. Fact (BeliefRecord)
 
@@ -381,6 +385,7 @@ Interactive-mode only. Prefix is `/-`.
 * Compound terms are forbidden everywhere.
 * Predicate arity must be at least 1.
 * `pred` annotations accept `description` only.
+* Duplicate `pred` declarations for the same name/arity are a hard error.
 * If a `pred` type list is provided, it must match the declared arity.
 * Builtin goals cannot be negated with `not`.
 * `between` does not enumerate values; all three arguments must already be bound.

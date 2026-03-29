@@ -1,7 +1,7 @@
 import re
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_top_level
@@ -53,6 +53,8 @@ class Predicate(Base):
         default=None,
         description="Optional list of type names for each argument position.",
     )
+
+    _explicitly_declared: bool = PrivateAttr(default=False)
 
     @field_validator("name")
     @classmethod
@@ -162,7 +164,9 @@ class Predicate(Base):
                 )
             kwargs.update(raw)
 
-        return cls(**kwargs)
+        instance = cls(**kwargs)
+        object.__setattr__(instance, "_explicitly_declared", True)
+        return instance
 
     def generate_type_constraints(self) -> List["Constraint"]:
         """Generate type-checking constraints from the type_list.

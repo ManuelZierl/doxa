@@ -235,6 +235,7 @@ class Branch(Base, AuditMixin):
         constraints: list[Constraint] = []
 
         pred_map: Dict[tuple[str, int], Predicate] = {}
+        explicit_pred_decls: set[tuple[str, int]] = set()
         ent_map: Dict[str, Entity] = {}
 
         for stmt in statements:
@@ -243,15 +244,29 @@ class Branch(Base, AuditMixin):
             if stripped.startswith("pred "):
                 pred = Predicate.from_doxa(stripped)
                 key = (pred.name, pred.arity)
-                if key not in pred_map:
-                    pred_map[key] = pred
+                if key in explicit_pred_decls:
+                    raise ValueError(
+                        f"Duplicate predicate declaration: pred {pred.name}/{pred.arity}. "
+                        f"Each predicate may only be declared once with 'pred'."
+                    )
+                was_auto_created = key in pred_map
+                explicit_pred_decls.add(key)
+                if was_auto_created:
+                    # Upgrade auto-created predicate with explicit declaration
+                    old = pred_map[key]
+                    if old in predicates:
+                        predicates[predicates.index(old)] = pred
+                    else:
+                        predicates.append(pred)
+                else:
                     predicates.append(pred)
-                    # Generate type-checking constraints if type_list is present
-                    type_constraints = pred.generate_type_constraints()
-                    for constraint in type_constraints:
-                        constraints.append(constraint)
-                        cls._collect_entities_from_constraint(constraint, ent_map)
-                        cls._collect_predicates_from_constraint(constraint, pred_map)
+                pred_map[key] = pred
+                # Generate type-checking constraints if type_list is present
+                type_constraints = pred.generate_type_constraints()
+                for constraint in type_constraints:
+                    constraints.append(constraint)
+                    cls._collect_entities_from_constraint(constraint, ent_map)
+                    cls._collect_predicates_from_constraint(constraint, pred_map)
             elif stripped.startswith("!:-"):
                 constraint = Constraint.from_doxa(stripped)
                 constraints.append(constraint)
@@ -391,7 +406,17 @@ class Branch(Base, AuditMixin):
         }
         for p in other.predicates:
             key = (p.name, p.arity)
-            if key not in pred_map:
+            if key in pred_map:
+                existing = pred_map[key]
+                if existing._explicitly_declared and p._explicitly_declared:
+                    raise ValueError(
+                        f"Duplicate predicate declaration: pred {p.name}/{p.arity}. "
+                        f"Each predicate may only be declared once with 'pred'."
+                    )
+                # Upgrade auto-created predicate with explicit declaration
+                if p._explicitly_declared:
+                    pred_map[key] = p
+            else:
                 pred_map[key] = p
 
         ent_map: Dict[str, "Entity"] = {e.name: e for e in self.entities}

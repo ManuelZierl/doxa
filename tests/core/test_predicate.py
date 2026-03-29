@@ -387,3 +387,247 @@ def test_predicate_type_list_single_arg() -> None:
 
     # 'entity' is a builtin type predicate, so no constraints are generated
     assert len(constraints) == 0
+
+
+# ── pred-is-optional tests ──────────────────────────────────────────────────
+
+
+def test_fact_valid_without_prior_pred_declaration() -> None:
+    """A fact like parent(a, b). is valid even if no pred parent/2. appears."""
+    branch = Branch.from_doxa("parent(alice, bob).")
+
+    assert len(branch.belief_records) == 1
+    assert branch.belief_records[0].pred_name == "parent"
+    assert branch.belief_records[0].pred_arity == 2
+    # Predicate should be auto-created
+    pred_names = {p.name for p in branch.predicates}
+    assert "parent" in pred_names
+
+
+def test_rule_valid_without_prior_pred_declaration() -> None:
+    """Rules can introduce predicates implicitly without any pred declaration."""
+    branch = Branch.from_doxa(
+        """
+        parent(alice, bob).
+        ancestor(X, Y) :- parent(X, Y).
+        """
+    )
+
+    assert len(branch.rules) == 1
+    pred_names = {p.name for p in branch.predicates}
+    assert "parent" in pred_names
+    assert "ancestor" in pred_names
+
+
+def test_constraint_valid_without_prior_pred_declaration() -> None:
+    """Constraints can reference predicates without prior pred declaration."""
+    branch = Branch.from_doxa(
+        """
+        approved(alice).
+        registered(alice).
+        !:- approved(X), not registered(X).
+        """
+    )
+
+    assert len(branch.constraints) == 1
+    pred_names = {p.name for p in branch.predicates}
+    assert "approved" in pred_names
+    assert "registered" in pred_names
+
+
+def test_pred_after_fact_usage() -> None:
+    """pred declaration is allowed after the predicate is already used in a fact."""
+    branch = Branch.from_doxa(
+        """
+        parent(alice, bob).
+        pred parent/2 @{description:"parent(P,C): P is parent of C"}.
+        """
+    )
+
+    assert len(branch.belief_records) == 1
+    # The explicit pred declaration should upgrade the auto-created one
+    parent_pred = next(p for p in branch.predicates if p.name == "parent")
+    assert parent_pred.description == "parent(P,C): P is parent of C"
+    assert parent_pred._explicitly_declared is True
+
+
+def test_pred_after_rule_usage() -> None:
+    """pred declaration is allowed after the predicate is used in a rule."""
+    branch = Branch.from_doxa(
+        """
+        parent(alice, bob).
+        ancestor(X, Y) :- parent(X, Y).
+        pred ancestor/2 @{description:"transitive ancestry"}.
+        """
+    )
+
+    ancestor_pred = next(p for p in branch.predicates if p.name == "ancestor")
+    assert ancestor_pred.description == "transitive ancestry"
+    assert ancestor_pred._explicitly_declared is True
+
+
+def test_pred_before_fact_usage() -> None:
+    """pred declaration before usage works as before."""
+    branch = Branch.from_doxa(
+        """
+        pred parent/2 @{description:"parent relation"}.
+        parent(alice, bob).
+        """
+    )
+
+    parent_pred = next(p for p in branch.predicates if p.name == "parent")
+    assert parent_pred.description == "parent relation"
+    assert parent_pred._explicitly_declared is True
+    assert len(branch.belief_records) == 1
+
+
+def test_bare_pred_no_runtime_effect_beyond_metadata() -> None:
+    """A bare pred foo/2. has no runtime effect beyond metadata/schema presence."""
+    branch_with_pred = Branch.from_doxa(
+        """
+        pred parent/2.
+        parent(alice, bob).
+        """
+    )
+    branch_without_pred = Branch.from_doxa(
+        """
+        parent(alice, bob).
+        """
+    )
+
+    # Both branches should have the same belief records
+    assert len(branch_with_pred.belief_records) == len(
+        branch_without_pred.belief_records
+    )
+    r1 = branch_with_pred.belief_records[0]
+    r2 = branch_without_pred.belief_records[0]
+    assert r1.pred_name == r2.pred_name
+    assert r1.pred_arity == r2.pred_arity
+    assert len(r1.args) == len(r2.args)
+
+    # Both branches should have the parent predicate
+    assert any(p.name == "parent" for p in branch_with_pred.predicates)
+    assert any(p.name == "parent" for p in branch_without_pred.predicates)
+
+    # Neither should generate constraints (no custom type_list)
+    assert len(branch_with_pred.constraints) == 0
+    assert len(branch_without_pred.constraints) == 0
+
+
+# ── duplicate pred declaration error tests ──────────────────────────────────
+
+
+def test_duplicate_pred_declaration_in_single_input_errors() -> None:
+    """Two pred declarations for the same name/arity in one input is an error."""
+    with pytest.raises(ValueError, match="Duplicate predicate declaration"):
+        Branch.from_doxa(
+            """
+            pred parent/2.
+            pred parent/2.
+            """
+        )
+
+
+def test_duplicate_pred_declaration_with_different_descriptions_errors() -> None:
+    """Two pred declarations for same name/arity error even with different metadata."""
+    with pytest.raises(ValueError, match="Duplicate predicate declaration"):
+        Branch.from_doxa(
+            """
+            pred parent/2 @{description:"first"}.
+            pred parent/2 @{description:"second"}.
+            """
+        )
+
+
+def test_duplicate_pred_declaration_via_merge_errors() -> None:
+    """Merging two branches with explicit pred for the same name/arity is an error."""
+    branch1 = Branch.from_doxa("pred parent/2.")
+    branch2 = Branch.from_doxa("pred parent/2.")
+
+    with pytest.raises(ValueError, match="Duplicate predicate declaration"):
+        branch1.merge(branch2)
+
+
+def test_different_arity_pred_declarations_allowed() -> None:
+    """pred foo/1 and pred foo/2 are distinct predicates, not duplicates."""
+    branch = Branch.from_doxa(
+        """
+        pred foo/1.
+        pred foo/2.
+        """
+    )
+
+    assert len([p for p in branch.predicates if p.name == "foo"]) == 2
+
+
+def test_merge_auto_created_with_explicit_pred_succeeds() -> None:
+    """Merging an auto-created predicate with an explicit pred declaration should upgrade it."""
+    branch_facts = Branch.from_doxa("parent(alice, bob).")
+    branch_pred = Branch.from_doxa('pred parent/2 @{description:"parent relation"}.')
+
+    merged = branch_facts.merge(branch_pred)
+
+    parent_pred = next(p for p in merged.predicates if p.name == "parent")
+    assert parent_pred.description == "parent relation"
+    assert parent_pred._explicitly_declared is True
+
+
+def test_merge_explicit_pred_with_auto_created_succeeds() -> None:
+    """Merging in the other direction: explicit first, auto-created second."""
+    branch_pred = Branch.from_doxa('pred parent/2 @{description:"parent relation"}.')
+    branch_facts = Branch.from_doxa("parent(alice, bob).")
+
+    merged = branch_pred.merge(branch_facts)
+
+    parent_pred = next(p for p in merged.predicates if p.name == "parent")
+    # The explicit one should be preserved (it was in self)
+    assert parent_pred.description == "parent relation"
+    assert parent_pred._explicitly_declared is True
+
+
+def test_merge_two_auto_created_predicates_succeeds() -> None:
+    """Merging two auto-created predicates for the same name/arity is fine."""
+    branch1 = Branch.from_doxa("parent(alice, bob).")
+    branch2 = Branch.from_doxa("parent(charlie, dave).")
+
+    merged = branch1.merge(branch2)
+
+    parent_preds = [p for p in merged.predicates if p.name == "parent"]
+    assert len(parent_preds) == 1
+
+
+# ── explicitly_declared tracking tests ──────────────────────────────────────
+
+
+def test_predicate_from_doxa_sets_explicitly_declared() -> None:
+    """Predicate.from_doxa sets _explicitly_declared to True."""
+    pred = Predicate.from_doxa("pred parent/2")
+    assert pred._explicitly_declared is True
+
+
+def test_predicate_constructor_defaults_explicitly_declared_false() -> None:
+    """Direct Predicate construction defaults _explicitly_declared to False."""
+    pred = Predicate(
+        kind=BaseKind.predicate,
+        name="parent",
+        arity=2,
+    )
+    assert pred._explicitly_declared is False
+
+
+def test_pred_with_type_list_after_usage_generates_constraints() -> None:
+    """A pred with type_list appearing after usage still generates type constraints."""
+    branch = Branch.from_doxa(
+        """
+        pred person/1.
+        parent(alice, bob).
+        pred parent/2 [person, person].
+        """
+    )
+
+    # Should have 2 constraints from parent's type_list
+    assert len(branch.constraints) == 2
+    for c in branch.constraints:
+        assert c.goals[0].pred_name == "parent"
+        assert c.goals[1].pred_name == "person"
+        assert c.goals[1].negated is True
