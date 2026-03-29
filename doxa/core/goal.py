@@ -8,6 +8,7 @@ from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
+    get_pred_ref_regex,
     parse_python_string_literal,
     split_top_level,
 )
@@ -22,6 +23,7 @@ from doxa.core.var import Var
 _GOAL_CALL_RE = get_goal_call_regex()
 _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()
+_PRED_REF_RE = get_pred_ref_regex()
 
 
 def _builtin_names() -> set[str]:
@@ -62,7 +64,7 @@ def goal_from_doxa(inp: str) -> "Goal":
 def goal_arg_from_doxa(inp: str) -> "GoalArg":
     last_error: ValueError | None = None
 
-    for cls in (LiteralArg, VarArg, EntityArg):
+    for cls in (LiteralArg, PredRefArg, VarArg, EntityArg):
         try:
             return cls.from_doxa(inp)
         except ValueError as exc:
@@ -342,7 +344,32 @@ class LiteralArg(Base):
         raise ValueError(f"Invalid literal argument: {inp!r}")
 
 
+class PredRefArg(Base):
+    kind: Literal[BaseKind.goal_arg] = Field(...)
+    pos: int = Field(..., ge=0, description="Argument position in goal (0-based).")
+    term_kind: Literal["pred_ref"] = Field(...)
+    pred_ref_name: str = Field(..., description="Referenced predicate name.")
+    pred_ref_arity: int = Field(..., ge=0, description="Referenced predicate arity.")
+
+    def to_doxa(self) -> str:
+        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+
+    @classmethod
+    def from_doxa(cls, inp: str) -> "PredRefArg":
+        s = inp.strip()
+        if not _PRED_REF_RE.fullmatch(s):
+            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
+        name, arity_str = s.rsplit("/", 1)
+        return cls(
+            kind=BaseKind.goal_arg,
+            pos=0,
+            term_kind="pred_ref",
+            pred_ref_name=name,
+            pred_ref_arity=int(arity_str),
+        )
+
+
 GoalArg = Annotated[
-    Union[VarArg, EntityArg, LiteralArg],
+    Union[VarArg, EntityArg, LiteralArg, PredRefArg],
     Field(discriminator="term_kind"),
 ]
