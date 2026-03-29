@@ -18,6 +18,7 @@ class Builtin(str, Enum):
     string = "string"
     float = "float"
     entity = "entity"
+    predicate_ref = "predicate_ref"
 
 
 # Expected argument count per builtin.
@@ -38,4 +39,5 @@ BUILTIN_ARITY: Dict[Builtin, int] = {
     Builtin.string: 1,
     Builtin.float: 1,
     Builtin.entity: 1,
+    Builtin.predicate_ref: 1,
 }

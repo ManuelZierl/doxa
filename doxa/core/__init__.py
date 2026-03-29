@@ -8,6 +8,7 @@ from doxa.core.belief_record import (
     BeliefArg,
     BeliefEntityArg,
     BeliefLiteralArg,
+    BeliefPredRefArg,
     BeliefRecord,
 )
 from doxa.core.branch import Branch
@@ -23,6 +24,7 @@ from doxa.core.goal import (
     GoalArg,
     GoalBase,
     LiteralArg,
+    PredRefArg,
     VarArg,
 )
 from doxa.core.goal_kinds import GoalKind
@@ -38,10 +40,12 @@ from doxa.core.rule import (
     RuleGoalArg,
     RuleGoalEntityArg,
     RuleGoalLiteralArg,
+    RuleGoalPredRefArg,
     RuleGoalVarArg,
     RuleHeadArg,
     RuleHeadEntityArg,
     RuleHeadLiteralArg,
+    RuleHeadPredRefArg,
     RuleHeadVarArg,
 )
 from doxa.core.term_kinds import TermKind
@@ -59,6 +63,7 @@ __all__ = [
     "BeliefArg",
     "BeliefEntityArg",
     "BeliefLiteralArg",
+    "BeliefPredRefArg",
     "Rule",
     "RuleHeadArg",
     "RuleHeadVarArg",
@@ -71,6 +76,8 @@ __all__ = [
     "RuleGoalVarArg",
     "RuleGoalEntityArg",
     "RuleGoalLiteralArg",
+    "RuleGoalPredRefArg",
+    "RuleHeadPredRefArg",
     "Goal",
     "GoalBase",
     "AssumeGoal",
@@ -80,6 +87,7 @@ __all__ = [
     "VarArg",
     "EntityArg",
     "LiteralArg",
+    "PredRefArg",
     "GoalKind",
     "TermKind",
     "Constraint",

@@ -13,6 +13,7 @@ from doxa.core._parsing.annotation_utils import (
 from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_int_regex,
+    get_pred_ref_regex,
     parse_python_string_literal,
     split_annotation_suffix,
     split_top_level,
@@ -27,12 +28,13 @@ from doxa.core.term_kinds import TermKind
 
 _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()
+_PRED_REF_RE = get_pred_ref_regex()
 
 
 def belief_arg_from_doxa(inp: str) -> BeliefArg:
     last_error: ValueError | None = None
 
-    for cls in (BeliefLiteralArg, BeliefEntityArg):
+    for cls in (BeliefLiteralArg, BeliefPredRefArg, BeliefEntityArg):
         try:
             return cls.from_doxa(inp)
         except ValueError as exc:
@@ -130,8 +132,38 @@ class BeliefLiteralArg(Base):
         return self
 
 
+class BeliefPredRefArg(Base):
+    kind: Literal[BaseKind.belief_arg] = Field(...)
+    term_kind: Literal[TermKind.pred_ref] = Field(...)
+    pred_ref_name: str = Field(
+        ...,
+        description="Referenced predicate name.",
+    )
+    pred_ref_arity: int = Field(
+        ...,
+        ge=0,
+        description="Referenced predicate arity.",
+    )
+
+    def to_doxa(self) -> str:
+        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+
+    @classmethod
+    def from_doxa(cls, inp: str) -> "BeliefPredRefArg":
+        s = inp.strip()
+        if not _PRED_REF_RE.fullmatch(s):
+            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
+        name, arity_str = s.rsplit("/", 1)
+        return cls(
+            kind=BaseKind.belief_arg,
+            term_kind=TermKind.pred_ref,
+            pred_ref_name=name,
+            pred_ref_arity=int(arity_str),
+        )
+
+
 BeliefArg = Annotated[
-    Union[BeliefEntityArg, BeliefLiteralArg],
+    Union[BeliefEntityArg, BeliefLiteralArg, BeliefPredRefArg],
     Field(discriminator="term_kind"),
 ]
 

@@ -20,10 +20,13 @@ Lines whose trimmed text starts with `%` are ignored.
 | String literal | Double quotes                                        | `"hello world"`              |
 | Integer        | Plain digits, optionally signed                      | `42`, `-3`                   |
 | Float          | Digits with `.`                                      | `1.5`, `3.14`                |
+| Pred reference | `name/arity`                                         | `parent/2`, `alive/1`        |
 
 Predicate names use the identifier form above.
 
 String literal values may contain Unicode.
+
+Predicate references use the syntax `name/arity` (e.g. `parent/2`) and are valid anywhere a ground value is accepted. They carry no automatic semantic hierarchy behavior; they are opaque literal values that happen to name a predicate.
 
 Compound terms are forbidden. For example, `foo(bar(X))` is a syntax error; introduce a fresh entity instead.
 
@@ -262,12 +265,13 @@ Arithmetic builtins solve for any one unknown argument.
 
 These builtins check runtime value kinds.
 
-| Builtin     | Meaning                        |
-| ----------- | ------------------------------ |
-| `int(X)`    | `X` is an integer              |
-| `float(X)`  | `X` is a floating-point number |
-| `string(X)` | `X` is a string literal        |
-| `entity(X)` | `X` is an entity identifier    |
+| Builtin              | Meaning                             |
+| -------------------- | ----------------------------------- |
+| `int(X)`             | `X` is an integer                   |
+| `float(X)`           | `X` is a floating-point number      |
+| `string(X)`          | `X` is a string literal             |
+| `entity(X)`          | `X` is an entity identifier         |
+| `predicate_ref(X)`   | `X` is a predicate reference value  |
 
 These names may be used in predicate `type_list` declarations.
 

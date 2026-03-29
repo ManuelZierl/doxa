@@ -5,6 +5,7 @@ from typing import List
 
 _INT_RE = re.compile(r"-?\d+")
 _FLOAT_RE = re.compile(r"-?(?:\d+\.\d*|\d*\.\d+)")
+_PRED_REF_RE = re.compile(r"^[a-z][A-Za-z0-9_]*/[0-9]+$")
 _GOAL_CALL_RE = re.compile(
     r"""
     ^\s*
@@ -225,3 +226,8 @@ def get_float_regex() -> re.Pattern:
 def get_goal_call_regex() -> re.Pattern:
     """Get compiled regex pattern for goal call syntax."""
     return _GOAL_CALL_RE
+
+
+def get_pred_ref_regex() -> re.Pattern:
+    """Get compiled regex pattern for predicate reference literals (name/arity)."""
+    return _PRED_REF_RE
