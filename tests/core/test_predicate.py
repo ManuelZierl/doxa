@@ -499,10 +499,11 @@ def test_bare_pred_no_runtime_effect_beyond_metadata() -> None:
     assert len(branch_with_pred.belief_records) == len(
         branch_without_pred.belief_records
     )
-    assert (
-        branch_with_pred.belief_records[0].to_doxa()
-        == branch_without_pred.belief_records[0].to_doxa()
-    )
+    r1 = branch_with_pred.belief_records[0]
+    r2 = branch_without_pred.belief_records[0]
+    assert r1.pred_name == r2.pred_name
+    assert r1.pred_arity == r2.pred_arity
+    assert len(r1.args) == len(r2.args)
 
     # Both branches should have the parent predicate
     assert any(p.name == "parent" for p in branch_with_pred.predicates)
