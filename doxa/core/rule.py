@@ -56,7 +56,12 @@ def _builtin_names() -> set[str]:
 def rule_head_arg_from_doxa(inp: str) -> RuleHeadArg:
     last_error: ValueError | None = None
 
-    for cls in (RuleHeadLiteralArg, RuleHeadPredRefArg, RuleHeadVarArg, RuleHeadEntityArg):
+    for cls in (
+        RuleHeadLiteralArg,
+        RuleHeadPredRefArg,
+        RuleHeadVarArg,
+        RuleHeadEntityArg,
+    ):
         try:
             return cls.from_doxa(inp)
         except ValueError as exc:
@@ -68,7 +73,12 @@ def rule_head_arg_from_doxa(inp: str) -> RuleHeadArg:
 def rule_goal_arg_from_doxa(inp: str) -> RuleGoalArg:
     last_error: ValueError | None = None
 
-    for cls in (RuleGoalLiteralArg, RuleGoalPredRefArg, RuleGoalVarArg, RuleGoalEntityArg):
+    for cls in (
+        RuleGoalLiteralArg,
+        RuleGoalPredRefArg,
+        RuleGoalVarArg,
+        RuleGoalEntityArg,
+    ):
         try:
             return cls.from_doxa(inp)
         except ValueError as exc:
