@@ -1,0 +1,5 @@
+person(alice).
+person(bob).
+pred person/1.
+?- person(X).
+/- exit

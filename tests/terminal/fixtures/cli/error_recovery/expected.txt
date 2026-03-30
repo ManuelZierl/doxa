@@ -1,5 +1,5 @@
 doxa>   Added: 1 predicate(s)
 doxa>   Added: 1 predicate(s), 1 fact(s)
-doxa>   Parse error: Invalid predicate declaration. Expected 'pred <name>/<arity>' or 'pred <name>/<arity> @{description:"..."}'.
+doxa>   Parse error: Template 'pred' requires a predicate reference (name/arity) as its first argument, but got EntityTemplateArg.
 doxa>   1: X='yes' | b=1, d=0, status=true
 doxa>   Goodbye.

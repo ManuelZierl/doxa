@@ -32,13 +32,13 @@ Compound terms are forbidden. For example, `foo(bar(X))` is a syntax error; intr
 
 ## Statements
 
-### 1. Predicate Declaration (optional built-in template sugar)
+### 1. Predicate Declaration (built-in `pred` template)
 
 ```doxa
 pred name/arity [type_list] [@{description:"..."}].
 ```
 
-`pred` is **optional** built-in template sugar for schema and documentation. Predicates may always be introduced implicitly by facts, rules, or constraints — no prior `pred` declaration is required.
+`pred` is a **built-in template** (see §Templates below) for schema and documentation. Predicates may always be introduced implicitly by facts, rules, or constraints — no prior `pred` declaration is required.
 
 A statement such as `parent(alice, bob).` is always valid even if no `pred parent/2.` appears anywhere. The parser auto-creates predicates as statements are parsed.
 
@@ -62,7 +62,7 @@ Rules:
 * `arity` must be at least 1.
 * If a `type_list` is provided, its length must match the predicate arity.
 * Each `type_list` entry names a unary predicate used for generated type-checking constraints.
-* Common built-in choices are `entity`, `int`, `float`, and `string`.
+* Common built-in choices are `entity`, `int`, `float`, `string`, and `predicate_ref`.
 * If `type_list` is omitted, it is treated as an all-`entity` list for parsing and serialization.
 * That default does not add generated type-checking constraints, because built-in type predicates such as `entity` are checked at runtime rather than through generated constraints.
 
@@ -183,6 +183,96 @@ Rules:
 * `assume(...)` works identically for ground and open queries.
 * Variables inside `assume(...)` that remain unbound are silently skipped (the assumption is incomplete and cannot be injected).
 * Multiple `assume(...)` goals in the same query are allowed; all are injected before solving begins.
+
+## Templates
+
+Templates are a **core language feature**. They are expansion mechanisms that receive parsed Doxa arguments and emit one or more valid Doxa statements (facts, rules, constraints, or predicate declarations).
+
+Built-in constructs such as `pred` are implemented as predefined templates. Users can define and import custom templates.
+
+### Template invocation syntax
+
+A template invocation is a dedicated statement form:
+
+```doxa
+template_name arg1 arg2 ... [@{annotations}].
+```
+
+The template name must be a registered template (either built-in or imported). Arguments are space-separated and parsed into typed objects from `doxa.core`:
+
+| Syntax              | Parsed as               | Examples                          |
+|---------------------|-------------------------|-----------------------------------|
+| `name/arity`        | Predicate reference     | `parent/2`, `alive/1`             |
+| `[t1, t2, ...]`     | Type list               | `[int, entity]`, `[string, _]`    |
+| `"text"`            | String literal          | `"hello world"`                   |
+| `42`, `-3`          | Integer literal         | `42`, `-3`                        |
+| `1.5`, `3.14`       | Float literal           | `1.5`, `3.14`                     |
+| lowercase id        | Entity / identifier     | `alice`, `my_pred`                |
+| `'quoted'`          | Quoted entity           | `'Thomas'`, `'Lama glama'`        |
+| Uppercase / `_`     | Variable                | `X`, `Person`, `_Tmp`             |
+
+Templates receive these as **structured parsed objects**, not raw source strings. Whether a variable is allowed in a given argument position is determined by the template.
+
+### Template imports
+
+Templates are imported explicitly via `use templates`:
+
+```doxa
+use templates "doxa_std".
+use templates "my_pkg.billing".
+use templates "my_pkg.billing" [money_pred, vat_rule].
+use templates "my_pkg.billing" [money_pred as money, vat_rule].
+```
+
+Rules:
+
+* `use templates` must reference a Python module path.
+* The target module must expose a `DOXA_TEMPLATES` dict mapping names to `DoxaTemplate` instances.
+* An optional bracket list selects specific templates from the module.
+* The `as` keyword allows aliasing an imported template to a different name.
+* `use templates` statements are processed in order; imported templates become available for subsequent statements.
+
+### Built-in templates
+
+The following templates are always available without an explicit import:
+
+| Template | Purpose                                              |
+|----------|------------------------------------------------------|
+| `pred`   | Predicate declaration with optional type list        |
+
+### Template API (Python)
+
+Templates are defined in Python and satisfy the `DoxaTemplate` protocol:
+
+```python
+class DoxaTemplate(Protocol):
+    def expand(self, call: TemplateCall, ctx: TemplateContext) -> list[DoxaStatement]:
+        ...
+```
+
+Where:
+
+* `TemplateCall` contains the template name, parsed arguments, and annotations.
+* `TemplateContext` provides module and source location information.
+* `DoxaStatement` is a union of `Predicate`, `BeliefRecord`, `Rule`, and `Constraint`.
+
+### Failure behaviour
+
+Templates must fail fast on invalid usage:
+
+* Wrong number of arguments
+* Wrong argument kind (e.g. variable where ground value required)
+* Unsupported annotation keys
+* Structurally invalid emitted statements
+
+Templates must not silently coerce, repair, or reinterpret invalid input.
+
+### Non-goals
+
+* Templates do not introduce automatic reasoning behaviour.
+* Templates do not imply new runtime semantics unless they expand to statements that do so.
+* Templates do not add general list literals or compound terms to Doxa.
+* Templates are Python-defined only.
 
 ## Annotation Keys
 

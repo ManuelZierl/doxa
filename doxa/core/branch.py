@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional, TYPE_CHECKING
 
 from pydantic import Field
 
@@ -12,6 +12,11 @@ from doxa.core.entity import Entity
 from doxa.core.predicate import Predicate
 from doxa.core.rule import Rule
 from doxa.core.schema_utils import compact_schema_for_llm
+from doxa.core.template import TemplateContext, parse_template_call, parse_use_templates
+from doxa.core.template_registry import TemplateRegistry
+
+if TYPE_CHECKING:
+    from doxa.core.templates.pred_template import DoxaStatement
 
 
 def _split_ax_statements(inp: str) -> list[str]:
@@ -214,7 +219,11 @@ class Branch(Base, AuditMixin):
         return "\n".join(statements)
 
     @classmethod
-    def from_doxa(cls, inp: str) -> "Branch":
+    def from_doxa(
+        cls,
+        inp: str,
+        registry: Optional[TemplateRegistry] = None,
+    ) -> "Branch":
         if not isinstance(inp, str):
             raise TypeError("Branch input must be a string.")
 
@@ -228,6 +237,10 @@ class Branch(Base, AuditMixin):
 
         statements = _split_ax_statements(s)
 
+        # Set up template registry (always includes builtins like 'pred')
+        if registry is None:
+            registry = TemplateRegistry()
+
         predicates: list[Predicate] = []
         entities: list[Entity] = []
         belief_records: list[BeliefRecord] = []
@@ -238,36 +251,37 @@ class Branch(Base, AuditMixin):
         explicit_pred_decls: set[tuple[str, int]] = set()
         ent_map: Dict[str, Entity] = {}
 
+        ctx = TemplateContext()
+
         for stmt in statements:
             stripped = stmt.strip()
 
-            if stripped.startswith("pred "):
-                pred = Predicate.from_doxa(stripped)
-                key = (pred.name, pred.arity)
-                if key in explicit_pred_decls:
-                    raise ValueError(
-                        f"Duplicate predicate declaration: pred {pred.name}/{pred.arity}. "
-                        f"Each predicate may only be declared once with 'pred'."
-                    )
-                was_auto_created = key in pred_map
-                explicit_pred_decls.add(key)
-                if was_auto_created:
-                    # Upgrade auto-created predicate with explicit declaration
-                    old = pred_map[key]
-                    if old in predicates:
-                        predicates[predicates.index(old)] = pred
-                    else:
-                        predicates.append(pred)
-                else:
-                    predicates.append(pred)
-                pred_map[key] = pred
-                # Generate type-checking constraints if type_list is present
-                type_constraints = pred.generate_type_constraints()
-                for constraint in type_constraints:
-                    constraints.append(constraint)
-                    cls._collect_entities_from_constraint(constraint, ent_map)
-                    cls._collect_predicates_from_constraint(constraint, pred_map)
-            elif stripped.startswith("!:-"):
+            # ── use templates import ─────────────────────────────────
+            if stripped.startswith("use templates "):
+                imp = parse_use_templates(stripped)
+                registry.import_templates(imp)
+                continue
+
+            # ── template invocation ──────────────────────────────────
+            first_token = stripped.split()[0] if stripped else ""
+            if registry.has(first_token) and not stripped.startswith("!:-"):
+                call = parse_template_call(stripped)
+                expanded = registry.expand(call, ctx)
+                cls._integrate_statements(
+                    expanded,
+                    predicates,
+                    entities,
+                    belief_records,
+                    rules,
+                    constraints,
+                    pred_map,
+                    explicit_pred_decls,
+                    ent_map,
+                )
+                continue
+
+            # ── normal statements ────────────────────────────────────
+            if stripped.startswith("!:-"):
                 constraint = Constraint.from_doxa(stripped)
                 constraints.append(constraint)
                 cls._collect_entities_from_constraint(constraint, ent_map)
@@ -304,6 +318,68 @@ class Branch(Base, AuditMixin):
             rules=rules,
             constraints=constraints,
         )
+
+    @classmethod
+    def _integrate_statements(
+        cls,
+        statements: List["DoxaStatement"],
+        predicates: list,
+        entities: list,
+        belief_records: list,
+        rules: list,
+        constraints: list,
+        pred_map: Dict,
+        explicit_pred_decls: set,
+        ent_map: Dict,
+    ) -> None:
+        """Merge expanded template statements into the branch accumulators."""
+        for item in statements:
+            if isinstance(item, Predicate):
+                key = (item.name, item.arity)
+                if item._explicitly_declared:
+                    if key in explicit_pred_decls:
+                        raise ValueError(
+                            f"Duplicate predicate declaration: pred {item.name}/{item.arity}. "
+                            f"Each predicate may only be declared once with 'pred'."
+                        )
+                    was_auto_created = key in pred_map
+                    explicit_pred_decls.add(key)
+                    if was_auto_created:
+                        old = pred_map[key]
+                        if old in predicates:
+                            predicates[predicates.index(old)] = item
+                        else:
+                            predicates.append(item)
+                    else:
+                        predicates.append(item)
+                    pred_map[key] = item
+                else:
+                    if key not in pred_map:
+                        pred_map[key] = item
+                        predicates.append(item)
+            elif isinstance(item, Constraint):
+                constraints.append(item)
+                cls._collect_entities_from_constraint(item, ent_map)
+                cls._collect_predicates_from_constraint(item, pred_map)
+            elif isinstance(item, Rule):
+                rules.append(item)
+                cls._collect_entities_from_rule(item, ent_map)
+                cls._collect_predicates_from_rule(item, pred_map)
+            elif isinstance(item, BeliefRecord):
+                belief_records.append(item)
+                cls._collect_entities_from_belief_record(item, ent_map)
+                key = (item.pred_name, item.pred_arity)
+                if key not in pred_map:
+                    pred_map[key] = Predicate(
+                        kind=BaseKind.predicate,
+                        name=item.pred_name,
+                        arity=item.pred_arity,
+                        type_list=["entity"] * item.pred_arity,
+                    )
+            else:
+                raise TypeError(
+                    f"Template emitted unsupported statement type: {type(item).__name__}"
+                )
 
     @classmethod
     def _collect_entities_from_belief_record(

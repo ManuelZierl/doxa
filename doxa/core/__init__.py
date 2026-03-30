@@ -48,6 +48,24 @@ from doxa.core.rule import (
     RuleHeadPredRefArg,
     RuleHeadVarArg,
 )
+from doxa.core.template import (
+    DoxaStatement,
+    DoxaTemplate,
+    EntityTemplateArg,
+    FloatTemplateArg,
+    IntTemplateArg,
+    PredRefTemplateArg,
+    StringTemplateArg,
+    TemplateArg,
+    TemplateCall,
+    TemplateContext,
+    TemplateImport,
+    TypeListTemplateArg,
+    VarTemplateArg,
+    parse_template_call,
+    parse_use_templates,
+)
+from doxa.core.template_registry import TemplateRegistry
 from doxa.core.term_kinds import TermKind
 from doxa.core.var import Var
 
@@ -97,4 +115,20 @@ __all__ = [
     "AnnotateMixin",
     "DescriptionMixin",
     "AuditMixin",
+    "DoxaStatement",
+    "DoxaTemplate",
+    "TemplateArg",
+    "TemplateCall",
+    "TemplateContext",
+    "TemplateImport",
+    "TemplateRegistry",
+    "PredRefTemplateArg",
+    "TypeListTemplateArg",
+    "VarTemplateArg",
+    "EntityTemplateArg",
+    "StringTemplateArg",
+    "IntTemplateArg",
+    "FloatTemplateArg",
+    "parse_template_call",
+    "parse_use_templates",
 ]
