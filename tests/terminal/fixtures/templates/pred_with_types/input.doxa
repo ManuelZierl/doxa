@@ -1,0 +1,6 @@
+pred employee/2 [company, person].
+company(acme).
+person(alice).
+employee(acme, alice).
+?- employee(X, Y).
+/- exit

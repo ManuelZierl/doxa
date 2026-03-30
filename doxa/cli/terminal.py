@@ -150,7 +150,11 @@ def _add_to_branch(state: TerminalState, text: str) -> None:
         print(f"  Parse error: {exc}")
         return
 
-    state.branch = state.branch.merge(new_branch)
+    try:
+        state.branch = state.branch.merge(new_branch)
+    except Exception as exc:
+        print(f"  Merge error: {exc}")
+        return
 
     counts = []
     if new_branch.predicates:

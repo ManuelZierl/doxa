@@ -1,0 +1,4 @@
+pred parent/2 @{description:"parent(P,C): P is a direct parent of C"}.
+parent(alice, bob).
+?- parent(X, Y).
+/- exit
