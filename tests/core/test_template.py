@@ -9,7 +9,6 @@ from doxa.core.branch import Branch
 from doxa.core.constraint import Constraint
 from doxa.core.predicate import Predicate
 from doxa.core.template import (
-    DoxaStatement,
     EntityTemplateArg,
     FloatTemplateArg,
     IntTemplateArg,
@@ -155,7 +154,9 @@ class TestParseUseTemplates:
         assert imp.names is None
 
     def test_selective_import(self) -> None:
-        imp = parse_use_templates('use templates "my_pkg.billing" [money_pred, vat_rule]')
+        imp = parse_use_templates(
+            'use templates "my_pkg.billing" [money_pred, vat_rule]'
+        )
         assert imp.module == "my_pkg.billing"
         assert imp.names == [("money_pred", "money_pred"), ("vat_rule", "vat_rule")]
 
@@ -239,7 +240,9 @@ class TestPredTemplate:
 
     def test_pred_variable_first_arg(self) -> None:
         call = parse_template_call("pred X")
-        with pytest.raises(ValueError, match="requires a predicate reference.*variable"):
+        with pytest.raises(
+            ValueError, match="requires a predicate reference.*variable"
+        ):
             self.template.expand(call, self.ctx)
 
     def test_pred_wrong_second_arg(self) -> None:
@@ -386,7 +389,6 @@ class TestBranchTemplateIntegration:
                 from doxa.core.belief_record import (
                     BeliefEntityArg,
                     BeliefRecord,
-                    belief_arg_from_doxa,
                 )
                 from doxa.core.term_kinds import TermKind
 

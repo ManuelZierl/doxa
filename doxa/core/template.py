@@ -227,6 +227,7 @@ class DoxaTemplate(Protocol):
 # Template argument tokeniser
 # ---------------------------------------------------------------------------
 
+
 def _tokenise_template_args(raw: str) -> List[str]:
     """Split a template argument string into top-level tokens.
 
@@ -377,10 +378,12 @@ def parse_template_call(stmt: str) -> TemplateCall:
     # Extract template name (first token)
     m = re.match(r"^([a-z][A-Za-z0-9_]*)\b", s)
     if not m:
-        raise ValueError(f"Invalid template call: expected lowercase identifier, got {s!r}")
+        raise ValueError(
+            f"Invalid template call: expected lowercase identifier, got {s!r}"
+        )
 
     name = m.group(1)
-    rest = s[m.end():].strip()
+    rest = s[m.end() :].strip()
 
     # Split off annotation suffix
     body, annotation_str = split_annotation_suffix(rest)
@@ -420,7 +423,9 @@ class TemplateImport:
 
     __slots__ = ("module", "names")
 
-    def __init__(self, module: str, names: Optional[List[tuple[str, str]]] = None) -> None:
+    def __init__(
+        self, module: str, names: Optional[List[tuple[str, str]]] = None
+    ) -> None:
         self.module = module
         # names is a list of (original_name, alias) tuples; None means import all
         self.names = names
@@ -448,7 +453,9 @@ def parse_use_templates(stmt: str) -> TemplateImport:
         for part in parts:
             part = part.strip()
             # Check for "name as alias"
-            as_match = re.fullmatch(r"([a-z][A-Za-z0-9_]*)\s+as\s+([a-z][A-Za-z0-9_]*)", part)
+            as_match = re.fullmatch(
+                r"([a-z][A-Za-z0-9_]*)\s+as\s+([a-z][A-Za-z0-9_]*)", part
+            )
             if as_match:
                 names.append((as_match.group(1), as_match.group(2)))
             elif re.fullmatch(r"[a-z][A-Za-z0-9_]*", part):

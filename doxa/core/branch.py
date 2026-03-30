@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, TYPE_CHECKING
 
 from pydantic import Field
 
@@ -14,6 +14,9 @@ from doxa.core.rule import Rule
 from doxa.core.schema_utils import compact_schema_for_llm
 from doxa.core.template import TemplateContext, parse_template_call, parse_use_templates
 from doxa.core.template_registry import TemplateRegistry
+
+if TYPE_CHECKING:
+    from doxa.core.templates.pred_template import DoxaStatement
 
 
 def _split_ax_statements(inp: str) -> list[str]:
@@ -266,9 +269,14 @@ class Branch(Base, AuditMixin):
                 expanded = registry.expand(call, ctx)
                 cls._integrate_statements(
                     expanded,
-                    predicates, entities, belief_records,
-                    rules, constraints,
-                    pred_map, explicit_pred_decls, ent_map,
+                    predicates,
+                    entities,
+                    belief_records,
+                    rules,
+                    constraints,
+                    pred_map,
+                    explicit_pred_decls,
+                    ent_map,
                 )
                 continue
 
