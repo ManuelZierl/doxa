@@ -1,0 +1,7 @@
+event(meeting, d"2024-06-15").
+event(launch, dt"2024-06-15T10:30:00Z").
+task_duration(build, dur"P30D").
+?- event(X, D), date(D).
+?- event(X, D), datetime(D).
+?- task_duration(X, D), duration(D).
+/- exit
