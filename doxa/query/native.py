@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from doxa.core._parsing.parsing_utils import (
     parse_date_literal,
     parse_datetime_literal,
     parse_duration_literal,
 )
-from doxa.core.base_kinds import BaseKind
 from doxa.core.belief_record import (
     BeliefEntityArg,
     BeliefLiteralArg,
@@ -19,7 +18,6 @@ from doxa.core.belief_record import (
 )
 from doxa.core.branch import Branch
 from doxa.core.builtins import Builtin
-from doxa.core.constraint import Constraint
 from doxa.core.epistemic_semantics import (
     BelnapStatus,
     BelnapStatusSemantics,
@@ -28,7 +26,6 @@ from doxa.core.epistemic_semantics import (
     ConstraintApplicabilitySemantics,
     ConstraintPropagationSemantics,
     EpistemicSemanticsCapabilities,
-    EpistemicSemanticsConfig,
     NonAtomSemantics,
     RuleApplicabilitySemantics,
     RulePropagationSemantics,
@@ -43,8 +40,6 @@ from doxa.core.goal import (
     PredRefArg,
     VarArg,
 )
-from doxa.core.goal_kinds import GoalKind
-from doxa.core.literal_type import LiteralType
 from doxa.core.query import Query
 from doxa.core.rule import (
     RuleAtomGoal,
@@ -58,7 +53,6 @@ from doxa.core.rule import (
     RuleHeadPredRefArg,
     RuleHeadVarArg,
 )
-from doxa.core.term_kinds import TermKind
 from doxa.query.engine import (
     EngineInfo,
     QueryAnswer,
@@ -113,7 +107,11 @@ def _clean_resolved(text: str) -> Any:
     if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
         return text[1:-1]
     # Date literal: d"2024-06-15"
-    if text.startswith('d"') and not text.startswith('dt"') and not text.startswith('dur"'):
+    if (
+        text.startswith('d"')
+        and not text.startswith('dt"')
+        and not text.startswith('dur"')
+    ):
         try:
             return parse_date_literal(text)
         except (ValueError, TypeError):
@@ -190,9 +188,7 @@ class NativeQueryEngine(QueryEngine):
                     BodyFalsitySemantics.noisy_or,
                     BodyFalsitySemantics.maximum,
                 ),
-                rule_propagation=(
-                    RulePropagationSemantics.body_times_rule_weights,
-                ),
+                rule_propagation=(RulePropagationSemantics.body_times_rule_weights,),
                 constraint_propagation=(
                     ConstraintPropagationSemantics.body_times_constraint_weights_to_violation,
                 ),
@@ -324,7 +320,10 @@ class NativeQueryEngine(QueryEngine):
             elif isinstance(arg, LiteralArg):
                 return ("sym", _collect_text(arg.to_doxa()))
             elif isinstance(arg, PredRefArg):
-                return ("sym", _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"))
+                return (
+                    "sym",
+                    _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"),
+                )
             else:
                 raise TypeError(f"Unknown goal arg type: {type(arg)}")
 
@@ -336,7 +335,10 @@ class NativeQueryEngine(QueryEngine):
             elif isinstance(arg, RuleHeadLiteralArg):
                 return ("sym", _collect_text(arg.to_doxa()))
             elif isinstance(arg, RuleHeadPredRefArg):
-                return ("sym", _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"))
+                return (
+                    "sym",
+                    _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"),
+                )
             else:
                 raise TypeError(f"Unknown head arg type: {type(arg)}")
 
@@ -348,7 +350,10 @@ class NativeQueryEngine(QueryEngine):
             elif isinstance(arg, RuleGoalLiteralArg):
                 return ("sym", _collect_text(arg.to_doxa()))
             elif isinstance(arg, RuleGoalPredRefArg):
-                return ("sym", _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"))
+                return (
+                    "sym",
+                    _collect_text(f"{arg.pred_ref_name}/{arg.pred_ref_arity}"),
+                )
             else:
                 raise TypeError(f"Unknown rule goal arg type: {type(arg)}")
 
@@ -356,8 +361,16 @@ class NativeQueryEngine(QueryEngine):
         fact_specs = []
         for record in branch.belief_records:
             arg_indices = [_collect_belief_arg(a) for a in record.args]
-            fact_specs.append((record.pred_name, record.pred_arity,
-                               arg_indices, record.b, record.d, record.src))
+            fact_specs.append(
+                (
+                    record.pred_name,
+                    record.pred_arity,
+                    arg_indices,
+                    record.b,
+                    record.d,
+                    record.src,
+                )
+            )
 
         # Pre-collect texts from rules
         rule_specs = []
@@ -366,17 +379,25 @@ class NativeQueryEngine(QueryEngine):
             body_raw = []
             for goal in rule.goals:
                 if isinstance(goal, RuleBuiltinGoal):
-                    body_raw.append({
-                        "builtin_name": goal.builtin_name.value,
-                        "args_raw": [_collect_rule_goal_arg(a) for a in goal.goal_args],
-                    })
+                    body_raw.append(
+                        {
+                            "builtin_name": goal.builtin_name.value,
+                            "args_raw": [
+                                _collect_rule_goal_arg(a) for a in goal.goal_args
+                            ],
+                        }
+                    )
                 elif isinstance(goal, RuleAtomGoal):
-                    body_raw.append({
-                        "pred_name": goal.pred_name,
-                        "pred_arity": goal.pred_arity,
-                        "negated": goal.negated,
-                        "args_raw": [_collect_rule_goal_arg(a) for a in goal.goal_args],
-                    })
+                    body_raw.append(
+                        {
+                            "pred_name": goal.pred_name,
+                            "pred_arity": goal.pred_arity,
+                            "negated": goal.negated,
+                            "args_raw": [
+                                _collect_rule_goal_arg(a) for a in goal.goal_args
+                            ],
+                        }
+                    )
             rule_specs.append((i, rule, head_args_raw, body_raw))
 
         # Pre-collect texts from ground constraints
@@ -395,9 +416,16 @@ class NativeQueryEngine(QueryEngine):
             for goal in constraint.goals:
                 if not goal.negated:
                     arg_indices = [_collect_goal_arg(a) for a in goal.goal_args]
-                    constraint_facts.append((goal.pred_name, goal.pred_arity,
-                                             arg_indices, 0.0, constraint.b,
-                                             constraint.src))
+                    constraint_facts.append(
+                        (
+                            goal.pred_name,
+                            goal.pred_arity,
+                            arg_indices,
+                            0.0,
+                            constraint.b,
+                            constraint.src,
+                        )
+                    )
 
         # ── Single bulk intern call ───────────────────────────────────
         sym_ids = store.intern_batch(texts_to_intern) if texts_to_intern else []
@@ -428,21 +456,30 @@ class NativeQueryEngine(QueryEngine):
             body = []
             for g in body_raw:
                 if "builtin_name" in g:
-                    body.append({
-                        "builtin_name": g["builtin_name"],
-                        "args": [_resolve_arg(a) for a in g["args_raw"]],
-                    })
+                    body.append(
+                        {
+                            "builtin_name": g["builtin_name"],
+                            "args": [_resolve_arg(a) for a in g["args_raw"]],
+                        }
+                    )
                 else:
-                    body.append({
-                        "pred_name": g["pred_name"],
-                        "pred_arity": g["pred_arity"],
-                        "negated": g["negated"],
-                        "args": [_resolve_arg(a) for a in g["args_raw"]],
-                    })
+                    body.append(
+                        {
+                            "pred_name": g["pred_name"],
+                            "pred_arity": g["pred_arity"],
+                            "negated": g["negated"],
+                            "args": [_resolve_arg(a) for a in g["args_raw"]],
+                        }
+                    )
             store.add_rule(
-                branch_name, i,
-                rule.head_pred_name, rule.head_pred_arity,
-                head_args, body, rule.b, rule.d,
+                branch_name,
+                i,
+                rule.head_pred_name,
+                rule.head_pred_arity,
+                head_args,
+                body,
+                rule.b,
+                rule.d,
             )
 
     # ------------------------------------------------------------------
@@ -554,10 +591,12 @@ class NativeQueryEngine(QueryEngine):
             if a is not None and b is not None:
                 return [(dict(env), 1.0, 0.0)] if a == b else []
             if a is not None and bv and bv not in env:
-                new = dict(env); new[bv] = a
+                new = dict(env)
+                new[bv] = a
                 return [(new, 1.0, 0.0)]
             if b is not None and av and av not in env:
-                new = dict(env); new[av] = b
+                new = dict(env)
+                new[av] = b
                 return [(new, 1.0, 0.0)]
             return []
 
@@ -617,14 +656,18 @@ class NativeQueryEngine(QueryEngine):
                 try:
                     if name == Builtin.add:
                         result = (
-                            vals[0] + vals[1] if ui == 2
-                            else vals[2] - vals[1] if ui == 0
+                            vals[0] + vals[1]
+                            if ui == 2
+                            else vals[2] - vals[1]
+                            if ui == 0
                             else vals[2] - vals[0]
                         )
                     elif name == Builtin.sub:
                         result = (
-                            vals[0] - vals[1] if ui == 2
-                            else vals[2] + vals[1] if ui == 0
+                            vals[0] - vals[1]
+                            if ui == 2
+                            else vals[2] + vals[1]
+                            if ui == 0
                             else vals[0] - vals[2]
                         )
                     elif name == Builtin.mul:
@@ -667,16 +710,28 @@ class NativeQueryEngine(QueryEngine):
         # ── type checks ──────────────────────────────────────────────
         if name == Builtin.int:
             v = _resolve(args[0])
-            return [(dict(env), 1.0, 0.0)] if isinstance(v, int) and not isinstance(v, bool) else []
+            return (
+                [(dict(env), 1.0, 0.0)]
+                if isinstance(v, int) and not isinstance(v, bool)
+                else []
+            )
         if name == Builtin.float:
             v = _resolve(args[0])
-            return [(dict(env), 1.0, 0.0)] if isinstance(v, (int, float)) and not isinstance(v, bool) else []
+            return (
+                [(dict(env), 1.0, 0.0)]
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+                else []
+            )
         if name == Builtin.string:
             v = _resolve(args[0])
             return [(dict(env), 1.0, 0.0)] if isinstance(v, str) else []
         if name == Builtin.date:
             v = _resolve(args[0])
-            return [(dict(env), 1.0, 0.0)] if isinstance(v, date) and not isinstance(v, datetime) else []
+            return (
+                [(dict(env), 1.0, 0.0)]
+                if isinstance(v, date) and not isinstance(v, datetime)
+                else []
+            )
         if name == Builtin.datetime:
             v = _resolve(args[0])
             return [(dict(env), 1.0, 0.0)] if isinstance(v, datetime) else []
@@ -689,7 +744,7 @@ class NativeQueryEngine(QueryEngine):
         if name == Builtin.predicate_ref:
             # predicate_ref args look like "name/arity"
             v = _resolve(args[0])
-            return [(dict(env), 1.0, 0.0)] if isinstance(v, str) and '/' in v else []
+            return [(dict(env), 1.0, 0.0)] if isinstance(v, str) and "/" in v else []
 
         return []
 
@@ -716,9 +771,7 @@ class NativeQueryEngine(QueryEngine):
         return False
 
     def _evaluate(self, branch: Branch, query: Query) -> QueryResult:
-        effective_query_time = (
-            query.options.query_time or datetime.now(timezone.utc)
-        )
+        effective_query_time = query.options.query_time or datetime.now(timezone.utc)
         effective_valid_at = query.options.valid_at or effective_query_time
         effective_known_at = query.options.known_at or effective_query_time
 
@@ -733,7 +786,9 @@ class NativeQueryEngine(QueryEngine):
         for goal in query.goals:
             if isinstance(goal, AssumeGoal):
                 for assumption in goal.assumptions:
-                    args = [self._intern_goal_arg(store, a) for a in assumption.goal_args]
+                    args = [
+                        self._intern_goal_arg(store, a) for a in assumption.goal_args
+                    ]
                     store.assert_fact(
                         branch.name,
                         assumption.pred_name,
@@ -798,10 +853,9 @@ class NativeQueryEngine(QueryEngine):
                 continue
 
             # Filter anonymous vars from bindings, sort alphabetically
-            filtered = dict(sorted(
-                (k, v) for k, v in env.items()
-                if k not in query.anon_vars
-            ))
+            filtered = dict(
+                sorted((k, v) for k, v in env.items() if k not in query.anon_vars)
+            )
 
             # Distinct: deduplicate by (bindings_tuple)
             key = tuple(sorted(filtered.items()))
@@ -809,27 +863,25 @@ class NativeQueryEngine(QueryEngine):
                 continue
             seen.add(key)
 
-            answers.append(QueryAnswer(
-                bindings=filtered,
-                b=b,
-                d=d,
-                belnap_status=status,
-            ))
+            answers.append(
+                QueryAnswer(
+                    bindings=filtered,
+                    b=b,
+                    d=d,
+                    belnap_status=status,
+                )
+            )
 
         # ── Ordering ──────────────────────────────────────────────────
         if query.options.order_by:
             sort_keys = query.options.order_by
-            answers.sort(
-                key=lambda a: tuple(
-                    a.bindings.get(k, "") for k in sort_keys
-                )
-            )
+            answers.sort(key=lambda a: tuple(a.bindings.get(k, "") for k in sort_keys))
 
         # ── Limit / offset ───────────────────────────────────────────
         if query.options.offset:
-            answers = answers[query.options.offset:]
+            answers = answers[query.options.offset :]
         if query.options.limit is not None:
-            answers = answers[:query.options.limit]
+            answers = answers[: query.options.limit]
 
         return QueryResult(
             answers=tuple(answers),
@@ -842,9 +894,8 @@ class NativeQueryEngine(QueryEngine):
 
 # ── Focus filter ──────────────────────────────────────────────────────
 
-def _focus_matches(
-    focus: str, b: float, d: float, status: BelnapStatus
-) -> bool:
+
+def _focus_matches(focus: str, b: float, d: float, status: BelnapStatus) -> bool:
     """Return True if the answer matches the query focus filter."""
     if focus == "all":
         return True

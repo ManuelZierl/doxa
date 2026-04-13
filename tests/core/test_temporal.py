@@ -129,7 +129,10 @@ class TestRenderDurationLiteral:
         assert render_duration_literal(timedelta(days=30)) == 'dur"P30D"'
 
     def test_hours_minutes_seconds(self) -> None:
-        assert render_duration_literal(timedelta(hours=2, minutes=30, seconds=15)) == 'dur"PT2H30M15S"'
+        assert (
+            render_duration_literal(timedelta(hours=2, minutes=30, seconds=15))
+            == 'dur"PT2H30M15S"'
+        )
 
     def test_zero(self) -> None:
         assert render_duration_literal(timedelta(0)) == 'dur"PT0S"'

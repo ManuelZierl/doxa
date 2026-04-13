@@ -29,6 +29,7 @@ def _format_binding_value(v: Any) -> str:
         return render_duration_literal(v)
     return repr(v)
 
+
 # Try to enable readline history/completion
 try:
     import readline  # noqa: F401
@@ -136,7 +137,10 @@ def _run_query(state: TerminalState, text: str) -> None:
             parts = []
             if answer.bindings:
                 parts.append(
-                    ", ".join(f"{k}={_format_binding_value(v)}" for k, v in answer.bindings.items())
+                    ", ".join(
+                        f"{k}={_format_binding_value(v)}"
+                        for k, v in answer.bindings.items()
+                    )
                 )
             parts.append(
                 f"b={answer.b:.4g}, d={answer.d:.4g}, status={answer.belnap_status.value}"

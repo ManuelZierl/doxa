@@ -1,8 +1,8 @@
 """Shared parsing utilities for AX language constructs."""
 
 import re
-from datetime import date, datetime, timedelta, timezone
-from typing import List, Union
+from datetime import date, datetime, timedelta
+from typing import List
 
 _INT_RE = re.compile(r"-?\d+")
 _FLOAT_RE = re.compile(r"-?(?:\d+\.\d*|\d*\.\d+)")
@@ -269,14 +269,12 @@ def parse_date_literal(s: str) -> date:
     """Parse a date literal d"YYYY-MM-DD" and return a Python date."""
     m = _DATE_LIT_RE.fullmatch(s.strip())
     if not m:
-        raise ValueError(f"Invalid date literal: {s!r}. Expected d\"YYYY-MM-DD\".")
+        raise ValueError(f'Invalid date literal: {s!r}. Expected d"YYYY-MM-DD".')
     iso = m.group(1).strip()
     try:
         return date.fromisoformat(iso)
     except ValueError as exc:
-        raise ValueError(
-            f"Invalid date value in literal {s!r}: {exc}"
-        ) from exc
+        raise ValueError(f"Invalid date value in literal {s!r}: {exc}") from exc
 
 
 def parse_datetime_literal(s: str) -> datetime:
@@ -284,7 +282,7 @@ def parse_datetime_literal(s: str) -> datetime:
     m = _DATETIME_LIT_RE.fullmatch(s.strip())
     if not m:
         raise ValueError(
-            f"Invalid datetime literal: {s!r}. Expected dt\"YYYY-MM-DDTHH:MM:SSZ\"."
+            f'Invalid datetime literal: {s!r}. Expected dt"YYYY-MM-DDTHH:MM:SSZ".'
         )
     iso = m.group(1).strip()
     if iso.endswith("Z"):
@@ -292,9 +290,7 @@ def parse_datetime_literal(s: str) -> datetime:
     try:
         return datetime.fromisoformat(iso)
     except ValueError as exc:
-        raise ValueError(
-            f"Invalid datetime value in literal {s!r}: {exc}"
-        ) from exc
+        raise ValueError(f"Invalid datetime value in literal {s!r}: {exc}") from exc
 
 
 def parse_duration_literal(s: str) -> timedelta:
@@ -302,7 +298,7 @@ def parse_duration_literal(s: str) -> timedelta:
     m = _DURATION_LIT_RE.fullmatch(s.strip())
     if not m:
         raise ValueError(
-            f"Invalid duration literal: {s!r}. Expected dur\"P...\" (ISO 8601 duration)."
+            f'Invalid duration literal: {s!r}. Expected dur"P..." (ISO 8601 duration).'
         )
     iso = m.group(1).strip()
     return parse_iso_duration(iso)
@@ -326,7 +322,14 @@ def parse_iso_duration(s: str) -> timedelta:
     seconds_str = m.group("seconds")
     seconds = float(seconds_str) if seconds_str else 0.0
 
-    if years == 0 and months == 0 and days == 0 and hours == 0 and minutes == 0 and seconds == 0.0:
+    if (
+        years == 0
+        and months == 0
+        and days == 0
+        and hours == 0
+        and minutes == 0
+        and seconds == 0.0
+    ):
         # "P" alone or "PT" alone with no components is invalid
         if s.strip() == "P" or s.strip() == "PT":
             raise ValueError(f"Invalid ISO 8601 duration: {s!r} (no components)")

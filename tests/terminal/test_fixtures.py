@@ -93,9 +93,7 @@ def test_fixture(
     if engine == "native":
         category = name.split("/")[0]
         if category in _NATIVE_XFAIL_CATEGORIES or name in _NATIVE_XFAIL_FIXTURES:
-            pytest.xfail(
-                f"Native engine does not yet support {category} features"
-            )
+            pytest.xfail(f"Native engine does not yet support {category} features")
 
     # utf-8-sig strips the UTF-8 BOM (0xEF 0xBB 0xBF) if present, so both
     # BOM and non-BOM files are handled transparently.

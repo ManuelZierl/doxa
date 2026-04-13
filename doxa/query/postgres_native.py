@@ -279,7 +279,9 @@ class _NativeSqlEvaluator:
         self.sccs = sccs
         self.signature_to_scc = signature_to_scc
 
-    def _tarjan_scc(self, graph: Dict[Signature, Set[Signature]]) -> List[Set[Signature]]:
+    def _tarjan_scc(
+        self, graph: Dict[Signature, Set[Signature]]
+    ) -> List[Set[Signature]]:
         index = 0
         indices: Dict[Signature, int] = {}
         lowlinks: Dict[Signature, int] = {}
@@ -348,7 +350,8 @@ class _NativeSqlEvaluator:
             cur.execute(f"CREATE TEMP TABLE {tables[key]} ({witness_columns})")
 
         lookup_cols = ", ".join(
-            ["pred_name", "pred_arity"] + [f"arg_{idx}" for idx in range(self.max_arity)]
+            ["pred_name", "pred_arity"]
+            + [f"arg_{idx}" for idx in range(self.max_arity)]
         )
         cur.execute(
             f"CREATE INDEX {tables['known']}_lookup_idx ON {tables['known']} ({lookup_cols})"
@@ -377,7 +380,15 @@ class _NativeSqlEvaluator:
         arg_names = ", ".join(f"arg_{idx}" for idx in range(self.max_arity))
         arg_exprs = ", ".join(self._base_arg_expr(idx) for idx in range(self.max_arity))
         witness_cols = ", ".join(
-            ["witness_key", "pred_name", "pred_arity", "arg_key", "b", "d", "visited_atoms"]
+            [
+                "witness_key",
+                "pred_name",
+                "pred_arity",
+                "arg_key",
+                "b",
+                "d",
+                "visited_atoms",
+            ]
             + [f"arg_{idx}" for idx in range(self.max_arity)]
         )
         atom_cols = ", ".join(
@@ -411,7 +422,7 @@ class _NativeSqlEvaluator:
                        {arg_names}
                 FROM visible
             )
-            INSERT INTO {tables['witness']} ({witness_cols})
+            INSERT INTO {tables["witness"]} ({witness_cols})
             SELECT {witness_cols}
             FROM fact_witnesses
         """
@@ -431,14 +442,14 @@ class _NativeSqlEvaluator:
         )
         cur.execute(
             f"""
-            INSERT INTO {tables['known']} ({atom_cols})
+            INSERT INTO {tables["known"]} ({atom_cols})
             SELECT pred_name,
                    pred_arity,
                    arg_key,
-                   {self._aggregate_sql('b')} AS b,
-                   {self._aggregate_sql('d')} AS d,
+                   {self._aggregate_sql("b")} AS b,
+                   {self._aggregate_sql("d")} AS d,
                    {arg_names}
-            FROM {tables['witness']}
+            FROM {tables["witness"]}
             GROUP BY pred_name, pred_arity, arg_key, {arg_names}
             """
         )
@@ -467,7 +478,9 @@ class _NativeSqlEvaluator:
                     if (atom.pred_name, atom.pred_arity) in scc_signatures
                 ]
                 if recursive_positions:
-                    recursive_variants.extend((rule, pos) for pos in recursive_positions)
+                    recursive_variants.extend(
+                        (rule, pos) for pos in recursive_positions
+                    )
                 else:
                     seed_variants.append((rule, None))
 
@@ -507,8 +520,8 @@ class _NativeSqlEvaluator:
                 cur.execute(f"TRUNCATE {tables['delta']}")
                 cur.execute(
                     f"""
-                    INSERT INTO {tables['delta']}
-                    SELECT * FROM {tables['next_delta']}
+                    INSERT INTO {tables["delta"]}
+                    SELECT * FROM {tables["next_delta"]}
                     """
                 )
                 self._analyze_tables(
@@ -568,13 +581,21 @@ class _NativeSqlEvaluator:
             + [f"arg_{idx}" for idx in range(self.max_arity)]
         )
         witness_cols = ", ".join(
-            ["witness_key", "pred_name", "pred_arity", "arg_key", "b", "d", "visited_atoms"]
+            [
+                "witness_key",
+                "pred_name",
+                "pred_arity",
+                "arg_key",
+                "b",
+                "d",
+                "visited_atoms",
+            ]
             + [f"arg_{idx}" for idx in range(self.max_arity)]
         )
 
         sql = f"""
             WITH candidate_witnesses AS (
-                {' UNION ALL '.join(candidate_parts)}
+                {" UNION ALL ".join(candidate_parts)}
             ),
             grouped_candidates AS (
                 SELECT witness_key,
@@ -590,7 +611,7 @@ class _NativeSqlEvaluator:
                 GROUP BY witness_key, pred_name, pred_arity, arg_key, visited_atoms, {arg_names}
             ),
             upserted_witnesses AS (
-                INSERT INTO {tables['witness']} AS w ({witness_cols})
+                INSERT INTO {tables["witness"]} AS w ({witness_cols})
                 SELECT {witness_cols}
                 FROM grouped_candidates
                 ON CONFLICT (witness_key) DO UPDATE
@@ -609,8 +630,8 @@ class _NativeSqlEvaluator:
                        w.arg_key,
                        w.b,
                        w.d,
-                       {', '.join(f'w.arg_{idx} AS arg_{idx}' for idx in range(self.max_arity))}
-                FROM {tables['witness']} w
+                       {", ".join(f"w.arg_{idx} AS arg_{idx}" for idx in range(self.max_arity))}
+                FROM {tables["witness"]} w
                 JOIN changed_atoms c
                   ON w.pred_name = c.pred_name
                  AND w.pred_arity = c.pred_arity
@@ -626,21 +647,21 @@ class _NativeSqlEvaluator:
                        uw.arg_key,
                        uw.b,
                        uw.d,
-                       {', '.join(f'uw.arg_{idx} AS arg_{idx}' for idx in range(self.max_arity))}
+                       {", ".join(f"uw.arg_{idx} AS arg_{idx}" for idx in range(self.max_arity))}
                 FROM upserted_witnesses uw
             ),
             recomputed_atoms AS (
                 SELECT rw.pred_name,
                        rw.pred_arity,
                        rw.arg_key,
-                       {self._aggregate_sql('rw.b')} AS b,
-                       {self._aggregate_sql('rw.d')} AS d,
-                       {', '.join(f'rw.arg_{idx} AS arg_{idx}' for idx in range(self.max_arity))}
+                       {self._aggregate_sql("rw.b")} AS b,
+                       {self._aggregate_sql("rw.d")} AS d,
+                       {", ".join(f"rw.arg_{idx} AS arg_{idx}" for idx in range(self.max_arity))}
                 FROM relevant_witnesses rw
-                GROUP BY rw.pred_name, rw.pred_arity, rw.arg_key, {', '.join(f'rw.arg_{idx}' for idx in range(self.max_arity))}
+                GROUP BY rw.pred_name, rw.pred_arity, rw.arg_key, {", ".join(f"rw.arg_{idx}" for idx in range(self.max_arity))}
             ),
             upserted_atoms AS (
-                INSERT INTO {tables['known']} AS k ({atom_cols})
+                INSERT INTO {tables["known"]} AS k ({atom_cols})
                 SELECT {atom_cols}
                 FROM recomputed_atoms
                 ON CONFLICT (pred_name, pred_arity, arg_key) DO UPDATE
@@ -742,8 +763,8 @@ class _NativeSqlEvaluator:
                    ({applicability}) * %s AS d,
                    {carried_visited_atoms} AS visited_atoms,
                    {select_arg_cols}
-            FROM {' CROSS JOIN '.join(from_clauses)}
-            WHERE {' AND '.join(where_clauses)}
+            FROM {" CROSS JOIN ".join(from_clauses)}
+            WHERE {" AND ".join(where_clauses)}
         """
         inner_params: List[Any] = [
             str(rule.rule_idx),
@@ -764,7 +785,7 @@ class _NativeSqlEvaluator:
             SELECT md5(cand.witness_key_raw) AS witness_key,
                    cand.pred_name,
                    cand.pred_arity,
-                   {self._arg_key_sql('cand')} AS arg_key,
+                   {self._arg_key_sql("cand")} AS arg_key,
                    cand.b,
                    cand.d,
                    array_append(cand.visited_atoms, {head_atom_identity}) AS visited_atoms,
@@ -780,7 +801,9 @@ class _NativeSqlEvaluator:
         rows = cur.fetchall()
         answers: List[QueryAnswer] = []
         for row in rows:
-            bindings = {var_name: row[idx] for idx, var_name in enumerate(projected_vars)}
+            bindings = {
+                var_name: row[idx] for idx, var_name in enumerate(projected_vars)
+            }
             b = float(row[len(projected_vars)])
             d = float(row[len(projected_vars) + 1])
             answers.append(
@@ -821,28 +844,30 @@ class _NativeSqlEvaluator:
         projected_vars = sorted(self.query_vars)
         select_vars = [f"{var_bindings[name]} AS {name}" for name in projected_vars]
         group_by = ", ".join(projected_vars)
-        inner_select = ", ".join(select_vars + [f"{row_b} AS row_b", f"{row_d} AS row_d"])
+        inner_select = ", ".join(
+            select_vars + [f"{row_b} AS row_b", f"{row_d} AS row_d"]
+        )
 
         if projected_vars:
             sql = f"""
                 SELECT {group_by},
-                       {self._aggregate_sql('row_b')} AS b,
-                       {self._aggregate_sql('row_d')} AS d
+                       {self._aggregate_sql("row_b")} AS b,
+                       {self._aggregate_sql("row_d")} AS d
                 FROM (
                     SELECT {inner_select}
-                    FROM {' CROSS JOIN '.join(from_clauses)}
-                    WHERE {' AND '.join(where_clauses)}
+                    FROM {" CROSS JOIN ".join(from_clauses)}
+                    WHERE {" AND ".join(where_clauses)}
                 ) answer_rows
                 GROUP BY {group_by}
             """
         else:
             sql = f"""
-                SELECT {self._aggregate_sql('row_b')} AS b,
-                       {self._aggregate_sql('row_d')} AS d
+                SELECT {self._aggregate_sql("row_b")} AS b,
+                       {self._aggregate_sql("row_d")} AS d
                 FROM (
                     SELECT {row_b} AS row_b, {row_d} AS row_d
-                    FROM {' CROSS JOIN '.join(from_clauses)}
-                    WHERE {' AND '.join(where_clauses)}
+                    FROM {" CROSS JOIN ".join(from_clauses)}
+                    WHERE {" AND ".join(where_clauses)}
                 ) answer_rows
             """
 
@@ -860,7 +885,9 @@ class _NativeSqlEvaluator:
         for goal in rule.goals:
             if not isinstance(goal, RuleAtomGoal) or goal.negated:
                 return None
-            atom = self._atom_from_parts(goal.pred_name, goal.pred_arity, goal.goal_args)
+            atom = self._atom_from_parts(
+                goal.pred_name, goal.pred_arity, goal.goal_args
+            )
             if atom is None:
                 return None
             body.append(atom)
@@ -972,7 +999,10 @@ class _NativeSqlEvaluator:
         semantics = self.query.options.epistemic_semantics.rule_applicability
         if semantics == RuleApplicabilitySemantics.body_truth_only:
             return body_b_sql
-        if semantics == RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity:
+        if (
+            semantics
+            == RuleApplicabilitySemantics.body_truth_discounted_by_body_falsity
+        ):
             return f"({body_b_sql}) * (1.0 - ({body_d_sql}))"
         raise ValueError(f"Unsupported rule applicability semantics: {semantics!r}")
 
@@ -1040,8 +1070,7 @@ class _NativeSqlEvaluator:
             return "FALSE"
         prefix = f"{alias}." if alias else ""
         clauses = [
-            f"({prefix}pred_name = %s AND {prefix}pred_arity = %s)"
-            for _ in signatures
+            f"({prefix}pred_name = %s AND {prefix}pred_arity = %s)" for _ in signatures
         ]
         return " OR ".join(clauses)
 

@@ -306,7 +306,9 @@ def _compile_rule_body(rule: Rule, prefix: str) -> List[_Goal]:
     return out
 
 
-def _get_compiled_rule(ctx: _Context, rule_idx: int, rule: Rule, depth: int) -> _CompiledRule:
+def _get_compiled_rule(
+    ctx: _Context, rule_idx: int, rule: Rule, depth: int
+) -> _CompiledRule:
     key = (rule_idx, depth)
     compiled = ctx.compiled_rule_cache.get(key)
     if compiled is None:
@@ -573,8 +575,13 @@ def _to_number(v: float) -> Union[int, float]:
 
 
 def _temporal_arith(
-    op: Builtin, a_val: Any, b_val: Any, c_val: Any,
-    a_term: _Term, b_term: _Term, c_term: _Term,
+    op: Builtin,
+    a_val: Any,
+    b_val: Any,
+    c_val: Any,
+    a_term: _Term,
+    b_term: _Term,
+    c_term: _Term,
     subst: Subst,
 ) -> Optional[Iterator[Subst]]:
     """Try temporal arithmetic. Returns an iterator of substitutions if handled, None if not temporal."""
@@ -727,7 +734,14 @@ def _eval_builtin(goal: _BuiltinGoal, subst: Subst) -> Iterator[Subst]:
 
         # Try temporal arithmetic first; falls through to numeric if not temporal.
         temporal_result = _temporal_arith(
-            op, a_val, b_val, c_val, a_term, b_term, c_term, subst,
+            op,
+            a_val,
+            b_val,
+            c_val,
+            a_term,
+            b_term,
+            c_term,
+            subst,
         )
         if temporal_result is not None:
             yield from temporal_result
@@ -786,8 +800,14 @@ def _eval_builtin(goal: _BuiltinGoal, subst: Subst) -> Iterator[Subst]:
         return
 
     if op in (
-        Builtin.int, Builtin.string, Builtin.float, Builtin.entity,
-        Builtin.predicate_ref, Builtin.date, Builtin.datetime, Builtin.duration,
+        Builtin.int,
+        Builtin.string,
+        Builtin.float,
+        Builtin.entity,
+        Builtin.predicate_ref,
+        Builtin.date,
+        Builtin.datetime,
+        Builtin.duration,
     ):
         val = _resolve(goal.args[0], subst)
         if val is None:
@@ -805,7 +825,11 @@ def _eval_builtin(goal: _BuiltinGoal, subst: Subst) -> Iterator[Subst]:
         if op == Builtin.entity and isinstance(val, str):
             yield subst
             return
-        if op == Builtin.date and isinstance(val, date) and not isinstance(val, datetime):
+        if (
+            op == Builtin.date
+            and isinstance(val, date)
+            and not isinstance(val, datetime)
+        ):
             yield subst
             return
         if op == Builtin.datetime and isinstance(val, datetime):

@@ -103,8 +103,7 @@ def _restore_temporal_belief_arg(arg_data: dict) -> dict:
 def _restore_belief_record_data(record_data: dict) -> dict:
     restored = dict(record_data)
     restored["args"] = [
-        _restore_temporal_belief_arg(arg)
-        for arg in record_data.get("args", [])
+        _restore_temporal_belief_arg(arg) for arg in record_data.get("args", [])
     ]
     return restored
 

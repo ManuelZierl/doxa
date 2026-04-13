@@ -131,9 +131,7 @@ class PostgresQueryEngine(QueryEngine):
     # ------------------------------------------------------------------
 
     def _branch_signature(self, branch: Branch) -> str:
-        return hashlib.sha256(
-            branch.model_dump_json().encode("utf-8")
-        ).hexdigest()
+        return hashlib.sha256(branch.model_dump_json().encode("utf-8")).hexdigest()
 
     def _ensure_branch_saved(self, branch: Branch) -> None:
         signature = self._branch_signature(branch)

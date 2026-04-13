@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from doxa.core.base_kinds import BaseKind
 from doxa.core.belief_record import (
@@ -14,8 +14,6 @@ from doxa.core.belief_record import (
     BeliefRecord,
 )
 from doxa.core.branch import Branch
-from doxa.core.constraint import Constraint
-from doxa.core.predicate import Predicate
 from doxa.core.rule import (
     Rule,
     RuleAtomGoal,

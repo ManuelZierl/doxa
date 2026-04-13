@@ -309,11 +309,15 @@ class RuleHeadLiteralArg(Base):
             raise ValueError(
                 "Rule head literal with lit_type='date' must use a date value."
             )
-        if self.lit_type == LiteralType.datetime and not isinstance(self.value, _dt.datetime):
+        if self.lit_type == LiteralType.datetime and not isinstance(
+            self.value, _dt.datetime
+        ):
             raise ValueError(
                 "Rule head literal with lit_type='datetime' must use a datetime value."
             )
-        if self.lit_type == LiteralType.duration and not isinstance(self.value, _dt.timedelta):
+        if self.lit_type == LiteralType.duration and not isinstance(
+            self.value, _dt.timedelta
+        ):
             raise ValueError(
                 "Rule head literal with lit_type='duration' must use a timedelta value."
             )
@@ -628,11 +632,15 @@ class RuleGoalLiteralArg(Base):
             raise ValueError(
                 "Rule goal literal with lit_type='date' must use a date value."
             )
-        if self.lit_type == LiteralType.datetime and not isinstance(self.value, _dt.datetime):
+        if self.lit_type == LiteralType.datetime and not isinstance(
+            self.value, _dt.datetime
+        ):
             raise ValueError(
                 "Rule goal literal with lit_type='datetime' must use a datetime value."
             )
-        if self.lit_type == LiteralType.duration and not isinstance(self.value, _dt.timedelta):
+        if self.lit_type == LiteralType.duration and not isinstance(
+            self.value, _dt.timedelta
+        ):
             raise ValueError(
                 "Rule goal literal with lit_type='duration' must use a timedelta value."
             )

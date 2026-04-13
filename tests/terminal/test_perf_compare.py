@@ -31,6 +31,7 @@ from doxa.query.evaluator import InMemoryQueryEngine  # noqa: E402
 def _has_native_engine() -> bool:
     try:
         from doxa import _native  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -38,6 +39,7 @@ def _has_native_engine() -> bool:
 
 def _get_engines():
     from doxa.query.native import NativeQueryEngine
+
     return InMemoryQueryEngine(), NativeQueryEngine()
 
 
@@ -57,8 +59,8 @@ def _report(label, mem_time, nat_time, mem_n, nat_n):
     marker = "[+]" if nat_time <= mem_time else "[-]"
     print(
         f"\n  {marker} {label}\n"
-        f"      memory: {mem_time*1000:10.2f} ms  ({mem_n} answers)\n"
-        f"      native: {nat_time*1000:10.2f} ms  ({nat_n} answers)\n"
+        f"      memory: {mem_time * 1000:10.2f} ms  ({mem_n} answers)\n"
+        f"      native: {nat_time * 1000:10.2f} ms  ({nat_n} answers)\n"
         f"      speedup: {speedup:.2f}x"
     )
 
@@ -67,6 +69,7 @@ def _report(label, mem_time, nat_time, mem_n, nat_n):
 # 1. Wide fan-out -- star graph  (1 hub, N leaves, rule derives NxN pairs)
 #    Non-recursive: single rule firing, no depth issues.
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("n", [50, 100, 200, 500])
 def test_wide_fanout(n):
@@ -90,6 +93,7 @@ def test_wide_fanout(n):
 #    Non-recursive: single rule firing with builtin.
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("n", [100, 500, 1000, 2000])
 def test_arithmetic_derivation(n):
     if not _has_native_engine():
@@ -111,6 +115,7 @@ def test_arithmetic_derivation(n):
 # 3. Multi-rule chain -- N facts, 3 layers of non-recursive rules
 #    Each layer joins/filters, stressing the join engine.
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("n", [100, 500, 1000, 2000])
 def test_multi_rule_chain(n):
@@ -138,6 +143,7 @@ def test_multi_rule_chain(n):
 # 4. Many facts, simple scan -- no rules, just large predicate scan
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("n", [500, 1000, 5000, 10000])
 def test_large_scan(n):
     if not _has_native_engine():
@@ -159,13 +165,14 @@ def test_large_scan(n):
 #    N kept small (<=20) so in-memory depth limit (set to N+5) is enough.
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("n", [10, 15, 20])
 def test_transitive_closure(n):
     if not _has_native_engine():
         pytest.skip("doxa_native not installed")
     mem_eng, nat_eng = _get_engines()
 
-    facts = "\n".join(f"edge(n{i}, n{i+1})." for i in range(n))
+    facts = "\n".join(f"edge(n{i}, n{i + 1})." for i in range(n))
     doxa = facts + "\npath(X, Y) :- edge(X, Y).\npath(X, Z) :- edge(X, Y), path(Y, Z)."
     branch = Branch.from_doxa(doxa)
     # Set max_depth high enough for the in-memory engine to find all paths
@@ -180,6 +187,7 @@ def test_transitive_closure(n):
 # ---------------------------------------------------------------------------
 # 6. Join-heavy -- two large predicates, rule joins them
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("n", [100, 500, 1000])
 def test_binary_join(n):

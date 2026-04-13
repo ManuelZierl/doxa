@@ -317,10 +317,18 @@ class LiteralArg(Base):
             raise ValueError("Literal with lit_type='float' must use a float value.")
         if self.lit_type == LiteralType.date and not isinstance(self.value, _dt.date):
             raise ValueError("Literal with lit_type='date' must use a date value.")
-        if self.lit_type == LiteralType.datetime and not isinstance(self.value, _dt.datetime):
-            raise ValueError("Literal with lit_type='datetime' must use a datetime value.")
-        if self.lit_type == LiteralType.duration and not isinstance(self.value, _dt.timedelta):
-            raise ValueError("Literal with lit_type='duration' must use a timedelta value.")
+        if self.lit_type == LiteralType.datetime and not isinstance(
+            self.value, _dt.datetime
+        ):
+            raise ValueError(
+                "Literal with lit_type='datetime' must use a datetime value."
+            )
+        if self.lit_type == LiteralType.duration and not isinstance(
+            self.value, _dt.timedelta
+        ):
+            raise ValueError(
+                "Literal with lit_type='duration' must use a timedelta value."
+            )
         return self
 
     def to_doxa(self) -> str:
