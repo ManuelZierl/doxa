@@ -1,0 +1,13 @@
+[package]
+name = "doxa_edb"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+doxa_core = { path = "../doxa_core" }
+sled = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.6"

@@ -10,4 +10,8 @@ def __getattr__(name: str):
         from doxa.query.postgres import PostgresQueryEngine
 
         return PostgresQueryEngine
+    if name == "NativeQueryEngine":
+        from doxa.query.native import NativeQueryEngine
+
+        return NativeQueryEngine
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

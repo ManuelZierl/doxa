@@ -32,6 +32,14 @@ def _make_repo(memory_kind: str):
         from doxa.persistence.memory import InMemoryBranchRepository
 
         return InMemoryBranchRepository()
+    elif memory_kind == "native":
+        import tempfile
+
+        from doxa.persistence.native import NativeBranchRepository
+
+        edb_dir = tempfile.mkdtemp(prefix="doxa_edb_")
+        idb_dir = tempfile.mkdtemp(prefix="doxa_idb_")
+        return NativeBranchRepository(edb_dir, idb_dir)
     elif memory_kind == "postgres":
         import os
 
@@ -48,6 +56,10 @@ def _make_engine(engine_kind: str, repo=None):
         from doxa.query.memory import InMemoryQueryEngine
 
         return InMemoryQueryEngine()
+    elif engine_kind == "native":
+        from doxa.query.native import NativeQueryEngine
+
+        return NativeQueryEngine()
     elif engine_kind == "postgres":
         from doxa.query.postgres import PostgresQueryEngine
 

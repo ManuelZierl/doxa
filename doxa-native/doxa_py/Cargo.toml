@@ -1,0 +1,16 @@
+[package]
+name = "doxa_py"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true }
+serde_json = { workspace = true }
+doxa_core = { path = "../doxa_core" }
+doxa_idb = { path = "../doxa_idb" }
+doxa_edb = { path = "../doxa_edb" }
+doxa_engine = { path = "../doxa_engine" }
