@@ -4,12 +4,30 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from doxa.cli.commands import _load_file, dispatch
+from doxa.core._parsing.parsing_utils import (
+    render_date_literal,
+    render_datetime_literal,
+    render_duration_literal,
+)
 from doxa.core.branch import Branch
 from doxa.persistence.repository import BranchRepository
 from doxa.query.engine import QueryEngine, QueryResult
+
+
+def _format_binding_value(v: Any) -> str:
+    """Format a binding value for terminal display using canonical Doxa syntax."""
+    if isinstance(v, datetime):
+        return render_datetime_literal(v)
+    if isinstance(v, date):
+        return render_date_literal(v)
+    if isinstance(v, timedelta):
+        return render_duration_literal(v)
+    return repr(v)
 
 # Try to enable readline history/completion
 try:
@@ -118,7 +136,7 @@ def _run_query(state: TerminalState, text: str) -> None:
             parts = []
             if answer.bindings:
                 parts.append(
-                    ", ".join(f"{k}={v!r}" for k, v in answer.bindings.items())
+                    ", ".join(f"{k}={_format_binding_value(v)}" for k, v in answer.bindings.items())
                 )
             parts.append(
                 f"b={answer.b:.4g}, d={answer.d:.4g}, status={answer.belnap_status.value}"
