@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "doxa"
@@ -35,8 +35,12 @@ Homepage = "https://github.com/ManuelZierl/doxa"
 Source = "https://github.com/ManuelZierl/doxa"
 Issues = "https://github.com/ManuelZierl/doxa/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["doxa"]
+[tool.maturin]
+manifest-path = "doxa-native/doxa_py/Cargo.toml"
+module-name = "doxa._native"
+python-source = "."
+python-packages = ["doxa"]
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

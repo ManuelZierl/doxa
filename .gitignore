@@ -36,3 +36,8 @@ temp.md
 pytest-cache-files-*/
 tests/pytest-cache-files-*/
 tests/parser/pytest-cache-files-*/
+
+__ai__workspace__.py
+__ai__/last_task.txt
+__ai__/last_output.txt
+
