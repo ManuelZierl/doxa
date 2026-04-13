@@ -5,11 +5,20 @@ from typing import Annotated, List, Literal, Union
 from pydantic import Field, model_validator
 
 from doxa.core._parsing.parsing_utils import (
+    get_date_lit_regex,
+    get_datetime_lit_regex,
+    get_duration_lit_regex,
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
     get_pred_ref_regex,
+    parse_date_literal,
+    parse_datetime_literal,
+    parse_duration_literal,
     parse_python_string_literal,
+    render_date_literal,
+    render_datetime_literal,
+    render_duration_literal,
     split_top_level,
 )
 from doxa.core.base import Base
@@ -24,6 +33,9 @@ _GOAL_CALL_RE = get_goal_call_regex()
 _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()
 _PRED_REF_RE = get_pred_ref_regex()
+_DATE_LIT_RE = get_date_lit_regex()
+_DATETIME_LIT_RE = get_datetime_lit_regex()
+_DURATION_LIT_RE = get_duration_lit_regex()
 
 
 def _builtin_names() -> set[str]:
@@ -289,16 +301,26 @@ class LiteralArg(Base):
     pos: int = Field(..., ge=0, description="Argument position in goal (0-based).")
     term_kind: Literal["lit"] = Field(...)
     lit_type: LiteralType = Field(..., description="Literal type tag.")
-    value: str | int | float = Field(..., description="Literal value.")
+    value: object = Field(..., description="Literal value.")
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "LiteralArg":
+        import datetime as _dt
+
         if self.lit_type == LiteralType.str and not isinstance(self.value, str):
             raise ValueError("Literal with lit_type='str' must use a string value.")
         if self.lit_type == LiteralType.int and type(self.value) is not int:
             raise ValueError("Literal with lit_type='int' must use an int value.")
         if self.lit_type == LiteralType.float and type(self.value) is not float:
             raise ValueError("Literal with lit_type='float' must use a float value.")
+        if self.lit_type == LiteralType.date and not isinstance(self.value, _dt.date):
+            raise ValueError("Literal with lit_type='date' must use a date value.")
+        if self.lit_type == LiteralType.datetime and not isinstance(self.value, _dt.datetime):
+            raise ValueError("Literal with lit_type='datetime' must use a datetime value.")
+        if self.lit_type == LiteralType.duration and not isinstance(self.value, _dt.timedelta):
+            raise ValueError("Literal with lit_type='duration' must use a timedelta value.")
         return self
 
     def to_doxa(self) -> str:
@@ -308,11 +330,44 @@ class LiteralArg(Base):
             return str(self.value)
         if self.lit_type == LiteralType.float:
             return str(self.value)
+        if self.lit_type == LiteralType.date:
+            return render_date_literal(self.value)
+        if self.lit_type == LiteralType.datetime:
+            return render_datetime_literal(self.value)
+        if self.lit_type == LiteralType.duration:
+            return render_duration_literal(self.value)
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
     def from_doxa(cls, inp: str) -> "LiteralArg":
         s = inp.strip()
+
+        if _DATETIME_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.goal_arg,
+                pos=0,
+                term_kind="lit",
+                lit_type=LiteralType.datetime,
+                value=parse_datetime_literal(s),
+            )
+
+        if _DATE_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.goal_arg,
+                pos=0,
+                term_kind="lit",
+                lit_type=LiteralType.date,
+                value=parse_date_literal(s),
+            )
+
+        if _DURATION_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.goal_arg,
+                pos=0,
+                term_kind="lit",
+                lit_type=LiteralType.duration,
+                value=parse_duration_literal(s),
+            )
 
         if s.startswith('"') and s.endswith('"'):
             return cls(

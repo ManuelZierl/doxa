@@ -20,6 +20,9 @@ Lines whose trimmed text starts with `%` are ignored.
 | String literal | Double quotes                                        | `"hello world"`              |
 | Integer        | Plain digits, optionally signed                      | `42`, `-3`                   |
 | Float          | Digits with `.`                                      | `1.5`, `3.14`                |
+| Date literal   | `d"YYYY-MM-DD"`                                      | `d"2024-06-15"`              |
+| Datetime literal | `dt"YYYY-MM-DDTHH:MM:SSZ"`                         | `dt"2024-06-15T10:30:00Z"`   |
+| Duration literal | `dur"P..."`  (ISO 8601)                             | `dur"P30D"`, `dur"PT2H30M"`  |
 | Pred reference | `name/arity`                                         | `parent/2`, `alive/1`        |
 
 Predicate names use the identifier form above.
@@ -362,10 +365,50 @@ These builtins check runtime value kinds.
 | `string(X)`          | `X` is a string literal             |
 | `entity(X)`          | `X` is an entity identifier         |
 | `predicate_ref(X)`   | `X` is a predicate reference value  |
+| `date(X)`            | `X` is a date value                 |
+| `datetime(X)`        | `X` is a datetime value             |
+| `duration(X)`        | `X` is a duration value             |
 
 These names may be used in predicate `type_list` declarations.
 
 Infix operators such as `>=` or `<` are not part of the documented Doxa surface syntax. Use builtin forms such as `geq(A, B)` and `lt(A, B)`.
+
+### Temporal Values
+
+Doxa supports first-class temporal values: **date**, **datetime**, and **duration**.
+
+#### Literal Syntax
+
+| Type     | Syntax                         | Python type          | Example                          |
+|----------|--------------------------------|----------------------|----------------------------------|
+| date     | `d"YYYY-MM-DD"`                 | `datetime.date`      | `d"2024-06-15"`                   |
+| datetime | `dt"YYYY-MM-DDTHH:MM:SSZ"`     | `datetime.datetime`  | `dt"2024-06-15T10:30:00Z"`       |
+| duration | `dur"P..."`  (ISO 8601)         | `datetime.timedelta` | `dur"P30D"`, `dur"P1Y6M"`, `dur"PT2H30M"` |
+
+Duration uses fixed-unit conversion: 1 year = 365 days, 1 month = 30 days.
+
+#### Comparisons
+
+Comparison builtins (`lt`, `leq`, `gt`, `geq`, `eq`, `ne`) work on temporal values of the **same kind**. Comparing across kinds (e.g. date vs. datetime) is a type error and yields no results.
+
+#### Arithmetic
+
+`add` and `sub` support temporal operands. `mul` and `div` are not supported for temporal values.
+
+| Expression                    | Result type | Example                                       |
+|-------------------------------|-------------|-----------------------------------------------|
+| `date + duration`             | date        | `add(d"2024-01-01", dur"P30D", Result)`        |
+| `date - duration`             | date        | `sub(d"2024-01-31", dur"P30D", Result)`        |
+| `date - date`                 | duration    | `sub(d"2024-01-31", d"2024-01-01", Result)`    |
+| `datetime + duration`         | datetime    | `add(dt"2024-01-01T00:00:00Z", dur"PT1H", R)`  |
+| `datetime - duration`         | datetime    | `sub(dt"2024-01-01T01:00:00Z", dur"PT1H", R)`  |
+| `datetime - datetime`         | duration    | `sub(dt"2024-01-02T00:00:00Z", dt"2024-01-01T00:00:00Z", R)` |
+| `duration + duration`         | duration    | `add(dur"P1D", dur"PT12H", Result)`             |
+| `duration - duration`         | duration    | `sub(dur"P2D", dur"P1D", Result)`               |
+
+As with numeric arithmetic, temporal arithmetic can solve for any one unknown argument.
+
+Invalid temporal operations (e.g. `date + date`, `mul` on temporal values) yield no results (fail-fast, no silent coercion).
 
 ## Query Options
 

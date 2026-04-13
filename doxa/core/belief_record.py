@@ -11,10 +11,19 @@ from doxa.core._parsing.annotation_utils import (
     is_default_annotation,
 )
 from doxa.core._parsing.parsing_utils import (
+    get_date_lit_regex,
+    get_datetime_lit_regex,
+    get_duration_lit_regex,
     get_float_regex,
     get_int_regex,
     get_pred_ref_regex,
+    parse_date_literal,
+    parse_datetime_literal,
+    parse_duration_literal,
     parse_python_string_literal,
+    render_date_literal,
+    render_datetime_literal,
+    render_duration_literal,
     split_annotation_suffix,
     split_top_level,
 )
@@ -29,6 +38,9 @@ from doxa.core.term_kinds import TermKind
 _INT_RE = get_int_regex()
 _FLOAT_RE = get_float_regex()
 _PRED_REF_RE = get_pred_ref_regex()
+_DATE_LIT_RE = get_date_lit_regex()
+_DATETIME_LIT_RE = get_datetime_lit_regex()
+_DURATION_LIT_RE = get_duration_lit_regex()
 
 
 def belief_arg_from_doxa(inp: str) -> BeliefArg:
@@ -71,10 +83,12 @@ class BeliefLiteralArg(Base):
         ...,
         description="Literal type tag.",
     )
-    value: str | int | float = Field(
+    value: object = Field(
         ...,
         description="Literal value.",
     )
+
+    model_config = {"arbitrary_types_allowed": True}
 
     def to_doxa(self) -> str:
         if self.lit_type == LiteralType.str:
@@ -83,11 +97,41 @@ class BeliefLiteralArg(Base):
             return str(self.value)
         if self.lit_type == LiteralType.float:
             return str(self.value)
+        if self.lit_type == LiteralType.date:
+            return render_date_literal(self.value)
+        if self.lit_type == LiteralType.datetime:
+            return render_datetime_literal(self.value)
+        if self.lit_type == LiteralType.duration:
+            return render_duration_literal(self.value)
         raise ValueError(f"Unsupported literal type: {self.lit_type}")
 
     @classmethod
     def from_doxa(cls, inp: str) -> "BeliefLiteralArg":
         s = inp.strip()
+
+        if _DATETIME_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.belief_arg,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.datetime,
+                value=parse_datetime_literal(s),
+            )
+
+        if _DATE_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.belief_arg,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.date,
+                value=parse_date_literal(s),
+            )
+
+        if _DURATION_LIT_RE.fullmatch(s):
+            return cls(
+                kind=BaseKind.belief_arg,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.duration,
+                value=parse_duration_literal(s),
+            )
 
         if s.startswith('"') and s.endswith('"'):
             return cls(
@@ -117,6 +161,8 @@ class BeliefLiteralArg(Base):
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "BeliefLiteralArg":
+        import datetime as _dt
+
         if self.lit_type == LiteralType.str and not isinstance(self.value, str):
             raise ValueError(
                 "BeliefLiteralArg with lit_type='str' must use a string value."
@@ -128,6 +174,22 @@ class BeliefLiteralArg(Base):
         if self.lit_type == LiteralType.float and type(self.value) is not float:
             raise ValueError(
                 "BeliefLiteralArg with lit_type='float' must use a float value."
+            )
+        if self.lit_type == LiteralType.date and not isinstance(self.value, _dt.date):
+            raise ValueError(
+                "BeliefLiteralArg with lit_type='date' must use a date value."
+            )
+        if self.lit_type == LiteralType.datetime and not isinstance(
+            self.value, _dt.datetime
+        ):
+            raise ValueError(
+                "BeliefLiteralArg with lit_type='datetime' must use a datetime value."
+            )
+        if self.lit_type == LiteralType.duration and not isinstance(
+            self.value, _dt.timedelta
+        ):
+            raise ValueError(
+                "BeliefLiteralArg with lit_type='duration' must use a timedelta value."
             )
         return self
 
