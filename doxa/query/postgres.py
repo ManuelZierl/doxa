@@ -1,14 +1,13 @@
 """PostgreSQL-accelerated query engine.
 
-This engine produces *exactly* the same epistemic answers as
-:class:`~doxa.query.memory.InMemoryQueryEngine`.  The speed-up comes from
-pushing temporal visibility filtering (``et``, ``vf``, ``vt``) into SQL
-``WHERE`` clauses so that only the relevant belief records are transferred
-from PostgreSQL to the Python evaluation layer.
+This engine produces *exactly* the same epistemic answers as the shared
+evaluator. The speed-up comes from pushing temporal visibility filtering
+(``et``, ``vf``, ``vt``) into SQL ``WHERE`` clauses so that only the
+relevant belief records are transferred from PostgreSQL to the evaluator.
 
 The epistemic reasoning itself (rule chaining, constraint checking,
 Belnap status derivation, builtins, …) reuses the battle-tested functions
-from :mod:`doxa.query.memory`.
+from :mod:`doxa.query.evaluator`.
 
 Usage::
 
@@ -24,20 +23,24 @@ Usage::
 
 from __future__ import annotations
 
+import hashlib
+import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from doxa.core.branch import Branch
 from doxa.core.query import Query
 from doxa.query.engine import EngineInfo, QueryEngine, QueryResult
+from doxa.query.postgres_native import try_evaluate_native
 
 if TYPE_CHECKING:
     from doxa.persistence.postgres import PostgresBranchRepository
 
 
 # ---------------------------------------------------------------------------
-# Import the full epistemic evaluation machinery from the memory engine.
-# We reuse *all* internal helpers so that results are bit-identical.
+# Import the full epistemic evaluation machinery from the shared evaluator.
+# This keeps Postgres independent from the in-memory engine module while
+# preserving bit-identical semantics.
 # ---------------------------------------------------------------------------
 
 from doxa.core.epistemic_semantics import (
@@ -53,7 +56,7 @@ from doxa.core.epistemic_semantics import (
     SupportAggregationSemantics,
 )
 from doxa.query.engine import BelnapStatus, QueryAnswer
-from doxa.query.memory import (
+from doxa.query.evaluator import (
     ExplainCollector,
     _aggregate_answers_from_truth,
     _apply_focus,
@@ -85,6 +88,7 @@ class PostgresQueryEngine(QueryEngine):
 
     def __init__(self, repo: "PostgresBranchRepository") -> None:
         self._repo = repo
+        self._synced_branch_signatures: dict[str, str] = {}
 
     @property
     def info(self) -> EngineInfo:
@@ -126,13 +130,29 @@ class PostgresQueryEngine(QueryEngine):
     # Core evaluation
     # ------------------------------------------------------------------
 
+    def _branch_signature(self, branch: Branch) -> str:
+        return hashlib.sha256(
+            branch.model_dump_json().encode("utf-8")
+        ).hexdigest()
+
+    def _ensure_branch_saved(self, branch: Branch) -> None:
+        signature = self._branch_signature(branch)
+        if self._synced_branch_signatures.get(branch.name) == signature:
+            return
+        self._repo.save(branch)
+        self._synced_branch_signatures[branch.name] = signature
+
     def _evaluate(self, branch: Branch, query: Query) -> QueryResult:
         effective_query_time, effective_valid_at, effective_known_at = (
             _resolve_effective_times(query)
         )
 
         # ── Auto-sync: ensure the branch is in the database ──────────
-        self._repo.save(branch)
+        self._ensure_branch_saved(branch)
+        if os.environ.get("DOXA_POSTGRES_NATIVE_SQL") == "1":
+            native_result = try_evaluate_native(self._repo._conn, branch, query)
+            if native_result is not None:
+                return native_result
 
         # ── Fast path: load only visible records from PostgreSQL ──────
         records = self._repo.get_visible_belief_records(
