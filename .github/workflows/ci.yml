@@ -28,10 +28,14 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Show Python environment
         run: |
           python --version
           python -m pip --version
+          rustc --version
 
       - name: Install dependencies
         run: |
@@ -41,7 +45,8 @@ jobs:
       - name: Run test suite
         run: |
           pytest -vv -ra
-  publish:
+
+  verify-release:
     needs:
       - test
     runs-on: ubuntu-latest
@@ -51,42 +56,38 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') &&
       github.event_name == 'push' &&
       github.ref_type == 'tag'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Ensure tag points to latest commit on main
         run: |
           git fetch origin main
           TAG_COMMIT=$(git rev-parse HEAD)
           MAIN_COMMIT=$(git rev-parse origin/main)
-          
+
           echo "Tag commit:  $TAG_COMMIT"
           echo "Main commit: $MAIN_COMMIT"
-          
+
           if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
             echo "❌ Tag does not point to the latest commit on main"
             exit 1
           fi
+
       - name: Check that tag version matches pyproject.toml
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           FILE_VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f2)
-          
+
           echo "Tag version: $TAG_VERSION"
           echo "File version: $FILE_VERSION"
-          
+
           if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
             echo "❌ Tag version (v$TAG_VERSION) does not match version in pyproject.toml ($FILE_VERSION)"
             exit 1
           fi
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build twine
+
       - name: Check that pyproject.toml and doxa/__version__.py are in sync
         run: |
           VERSION_PYPROJECT=$(grep '^version =' pyproject.toml | cut -d '"' -f2)
@@ -95,10 +96,116 @@ jobs:
             echo "❌ Version mismatch between pyproject.toml and doxa/__version__.py"
             exit 1
           fi
-      - name: Build package
-        run: python -m build
+
+  build-wheels:
+    name: Build wheels (${{ matrix.os }})
+    needs:
+      - verify-release
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event_name == 'push' &&
+      github.ref_type == 'tag'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --find-interpreter
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*
+
+  build-sdist:
+    name: Build source distribution
+    needs:
+      - verify-release
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event_name == 'push' &&
+      github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs:
+      - build-wheels
+      - build-sdist
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event_name == 'push' &&
+      github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download sdist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+      - name: Install publish tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install twine
+
       - name: Check distribution
         run: python -m twine check dist/*
+
       - name: Smoke test built artifact
         run: |
           python -m pip install --upgrade pip
@@ -106,6 +213,7 @@ jobs:
           doxa --version
           doxa --help > /dev/null
           python -c "import doxa, doxa.core, doxa.query, doxa.persistence"
+
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__

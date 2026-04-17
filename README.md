@@ -93,16 +93,34 @@ For the full formal syntax, semantics, builtins, query options, and edge cases s
 
 ## Getting Started
 
+### Install from PyPI (recommended)
+
 ```bash
-pip install -e .            # install
-pip install -e ".[postgres]" # optional PostgreSQL backend dependencies
-pytest                       # run tests
-doxa                         # launch interactive terminal
+pip install doxa
+# or with PostgreSQL extras:
+pip install "doxa[postgres]"
+```
+
+### Install from source (requires Rust)
+
+The Python package includes a native Rust extension (`doxa._native`).
+If you install from a local checkout, make sure a Rust toolchain is available.
+
+```bash
+pip install -e .
+pip install -e ".[postgres]"   # optional PostgreSQL backend dependencies
+```
+
+### Development quickstart
+
+```bash
+pytest
+doxa
 ```
 
 The CLI supports `memory`, `native`, and `postgres` backends via `--memory` and `--engine`.
 
-**Requires Python ≥ 3.11**
+**Requires Python >= 3.11**
 
 ## License
 
