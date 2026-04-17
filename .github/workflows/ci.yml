@@ -6,7 +6,7 @@ on:
       - main
       - develop
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
@@ -28,14 +28,15 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@1.77.2
 
-      - name: Show Python environment
+      - name: Show toolchain versions
         run: |
           python --version
           python -m pip --version
           rustc --version
+          cargo --version
 
       - name: Install dependencies
         run: |
@@ -43,15 +44,13 @@ jobs:
           python -m pip install -e ".[dev,postgres]"
 
       - name: Run test suite
-        run: |
-          pytest -vv -ra
+        run: pytest -vv -ra
 
-  verify-release:
+  release_checks:
+    name: Release Checks
     needs:
       - test
     runs-on: ubuntu-latest
-
-    # Only run on tag push
     if: |
       startsWith(github.ref, 'refs/tags/v') &&
       github.event_name == 'push' &&
@@ -60,6 +59,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Ensure tag points to latest commit on main
         run: |
@@ -71,94 +72,44 @@ jobs:
           echo "Main commit: $MAIN_COMMIT"
 
           if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
-            echo "❌ Tag does not point to the latest commit on main"
+            echo "Tag does not point to the latest commit on main"
             exit 1
           fi
 
-      - name: Check that tag version matches pyproject.toml
+      - name: Validate release versions
         run: |
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          FILE_VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f2)
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
 
-          echo "Tag version: $TAG_VERSION"
-          echo "File version: $FILE_VERSION"
+          tag_version = os.environ["GITHUB_REF"].removeprefix("refs/tags/v")
+          pyproject = pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
+          runtime = pathlib.Path("doxa/__version__.py").read_text(encoding="utf-8")
 
-          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
-            echo "❌ Tag version (v$TAG_VERSION) does not match version in pyproject.toml ($FILE_VERSION)"
-            exit 1
-          fi
+          pyproject_match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+          runtime_match = re.search(r'^__version__\s*=\s*"([^"]+)"', runtime, re.MULTILINE)
+          if not pyproject_match or not runtime_match:
+              raise SystemExit("Could not parse project versions")
 
-      - name: Check that pyproject.toml and doxa/__version__.py are in sync
-        run: |
-          VERSION_PYPROJECT=$(grep '^version =' pyproject.toml | cut -d '"' -f2)
-          VERSION_RUNTIME=$(grep '^__version__ =' doxa/__version__.py | cut -d '"' -f2)
-          if [ "$VERSION_PYPROJECT" != "$VERSION_RUNTIME" ]; then
-            echo "❌ Version mismatch between pyproject.toml and doxa/__version__.py"
-            exit 1
-          fi
+          pyproject_version = pyproject_match.group(1)
+          runtime_version = runtime_match.group(1)
 
-  build-wheels:
-    name: Build wheels (${{ matrix.os }})
-    needs:
-      - verify-release
-    if: |
-      startsWith(github.ref, 'refs/tags/v') &&
-      github.event_name == 'push' &&
-      github.ref_type == 'tag'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+          print(f"Tag version:       {tag_version}")
+          print(f"pyproject version: {pyproject_version}")
+          print(f"runtime version:   {runtime_version}")
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+          if tag_version != pyproject_version:
+              raise SystemExit("Tag version does not match pyproject.toml")
+          if pyproject_version != runtime_version:
+              raise SystemExit("pyproject.toml and doxa/__version__.py are out of sync")
+          PY
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build wheel
+      - name: Build source distribution
         uses: PyO3/maturin-action@v1
         with:
-          command: build
-          args: --release --out dist --find-interpreter
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.os }}
-          path: dist/*
-
-  build-sdist:
-    name: Build source distribution
-    needs:
-      - verify-release
-    if: |
-      startsWith(github.ref, 'refs/tags/v') &&
-      github.event_name == 'push' &&
-      github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build sdist
-        uses: PyO3/maturin-action@v1
-        with:
+          maturin-version: latest
+          rust-toolchain: 1.77.2
           command: sdist
           args: --out dist
 
@@ -166,25 +117,75 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: dist/*
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  build_wheels:
+    name: Build wheels (${{ matrix.os }})
+    needs:
+      - release_checks
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python_bin: .smoke-venv/bin/python
+            cli_bin: .smoke-venv/bin/doxa
+          - os: macos-latest
+            python_bin: .smoke-venv/bin/python
+            cli_bin: .smoke-venv/bin/doxa
+          - os: windows-latest
+            python_bin: .smoke-venv/Scripts/python.exe
+            cli_bin: .smoke-venv/Scripts/doxa.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: latest
+          rust-toolchain: 1.77.2
+          command: build
+          args: --release --out dist --interpreter python
+
+      - name: Smoke test built wheel
+        shell: bash
+        run: |
+          python -m venv .smoke-venv
+          "${{ matrix.python_bin }}" -m pip install --upgrade pip
+          "${{ matrix.python_bin }}" -m pip install dist/*.whl
+          "${{ matrix.python_bin }}" -c "import doxa"
+          "${{ matrix.python_bin }}" -c "import doxa._native"
+          "${{ matrix.cli_bin }}" --help
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*.whl
+          if-no-files-found: error
 
   publish:
     name: Publish to PyPI
     needs:
-      - build-wheels
-      - build-sdist
+      - build_wheels
+    runs-on: ubuntu-latest
+
     if: |
       startsWith(github.ref, 'refs/tags/v') &&
       github.event_name == 'push' &&
       github.ref_type == 'tag'
-    runs-on: ubuntu-latest
 
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Download wheel artifacts
         uses: actions/download-artifact@v4
         with:
@@ -198,24 +199,19 @@ jobs:
           name: sdist
           path: dist
 
-      - name: Install publish tools
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check distributions
         run: |
           python -m pip install --upgrade pip
           python -m pip install twine
-
-      - name: Check distribution
-        run: python -m twine check dist/*
-
-      - name: Smoke test built artifact
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --force-reinstall dist/*.whl
-          doxa --version
-          doxa --help > /dev/null
-          python -c "import doxa, doxa.core, doxa.query, doxa.persistence"
+          python -m twine check dist/*
 
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: python -m twine upload dist/*

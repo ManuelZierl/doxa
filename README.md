@@ -91,37 +91,62 @@ For the full formal syntax, semantics, builtins, query options, and edge cases s
 | `doxa/cli/`         | CLI entry points and interactive terminal |
 | `tests/`            | Automated tests and fixtures              |
 
-## Getting Started
-
-### Install from PyPI (recommended)
+## Install
 
 ```bash
 pip install doxa
-# or with PostgreSQL extras:
+```
+
+Optional PostgreSQL dependencies:
+
+```bash
 pip install "doxa[postgres]"
 ```
 
-### Install from source (requires Rust)
-
-The Python package includes a native Rust extension (`doxa._native`).
-If you install from a local checkout, make sure a Rust toolchain is available.
+For local development from source:
 
 ```bash
-pip install -e .
-pip install -e ".[postgres]"   # optional PostgreSQL backend dependencies
+pip install -e ".[dev,postgres]"
+pytest
 ```
 
-### Development quickstart
+## Native Build Prerequisites
+
+- Python `>=3.11`
+- Rust toolchain `1.77.2` (policy pinned in `rust-toolchain.toml`)
+- A working C/C++ compiler toolchain (`build-essential` on Linux, Xcode CLT on macOS, MSVC Build Tools on Windows)
+
+Prebuilt wheels are published for Linux/macOS/Windows. The prerequisites above are required when building from source.
+
+## Backend Matrix
+
+| `--memory` backend | `--engine` backend | Status |
+|--------------------|--------------------|--------|
+| `memory`           | `memory`           | supported |
+| `memory`           | `native`           | supported |
+| `native`           | `memory`           | supported |
+| `native`           | `native`           | supported |
+| `postgres`         | `postgres`         | supported |
+| `memory`           | `postgres`         | not supported |
+| `postgres`         | `memory`           | not supported |
+| `postgres`         | `native`           | not supported |
+| `native`           | `postgres`         | not supported |
+
+## Environment Variables
+
+- `DOXA_POSTGRES_URL` (default: `postgresql://localhost/doxa`): PostgreSQL connection URL used by `--memory postgres`.
+- `DOXA_POSTGRES_NATIVE_SQL` (`1` to enable): route eligible PostgreSQL queries through the native SQL fast path.
+
+## Quick Start
 
 ```bash
-pytest
+doxa --help
 doxa
+doxa --memory postgres --engine postgres
 ```
 
 The CLI supports `memory`, `native`, and `postgres` backends via `--memory` and `--engine`.
 
-**Requires Python >= 3.11**
-
 ## License
 
-MIT
+[MIT](LICENSE)

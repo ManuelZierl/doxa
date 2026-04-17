@@ -13,7 +13,7 @@ def test_cli_default_memory_backend() -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, [], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["memory_kind"] == "memory"
@@ -44,7 +44,7 @@ def test_cli_tmp_flag() -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["--tmp"], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["memory_kind"] == "memory"
@@ -70,7 +70,7 @@ def test_cli_memory_backend_postgres() -> None:
 
                 result = runner.invoke(cli, ["--memory", "postgres"], input="\n")
 
-                assert result.exit_code == 0
+                assert result.exit_code == 0, result.output
                 mock_run.assert_called_once()
                 call_kwargs = mock_run.call_args.kwargs
                 assert call_kwargs["memory_kind"] == "postgres"
@@ -89,7 +89,7 @@ def test_cli_engine_backend_postgres() -> None:
                     cli, ["--memory", "postgres", "--engine", "postgres"], input="\n"
                 )
 
-                assert result.exit_code == 0
+                assert result.exit_code == 0, result.output
                 mock_run.assert_called_once()
                 call_kwargs = mock_run.call_args.kwargs
                 assert call_kwargs["engine_kind"] == "postgres"
@@ -111,7 +111,7 @@ def test_cli_preload_single_file(tmp_path: Path) -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["--file", str(test_file)], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert len(call_kwargs["preload_files"]) == 1
@@ -130,7 +130,7 @@ def test_cli_preload_multiple_files(tmp_path: Path) -> None:
             cli, ["--file", str(file1), "--file", str(file2)], input="\n"
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert len(call_kwargs["preload_files"]) == 2
@@ -151,7 +151,7 @@ def test_cli_short_file_flag(tmp_path: Path) -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["-f", str(test_file)], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert len(call_kwargs["preload_files"]) == 1
@@ -277,7 +277,7 @@ def test_cli_default_engine_matches_memory() -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["--memory", "memory"], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["memory_kind"] == "memory"
@@ -295,7 +295,7 @@ def test_cli_default_engine_matches_postgres() -> None:
 
                 result = runner.invoke(cli, ["--memory", "postgres"], input="\n")
 
-                assert result.exit_code == 0
+                assert result.exit_code == 0, result.output
                 mock_run.assert_called_once()
                 call_kwargs = mock_run.call_args.kwargs
                 assert call_kwargs["memory_kind"] == "postgres"
@@ -310,7 +310,7 @@ def test_cli_combined_flags(tmp_path: Path) -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["--tmp", "--file", str(test_file)], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["memory_kind"] == "memory"
@@ -324,7 +324,7 @@ def test_cli_case_insensitive_backends() -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, ["--memory", "MEMORY"], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
 
 
@@ -334,7 +334,7 @@ def test_cli_ephemeral_false_by_default() -> None:
     with patch("doxa.cli.terminal.run_terminal") as mock_run:
         result = runner.invoke(cli, [], input="\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         mock_run.assert_called_once()
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["ephemeral"] is False
