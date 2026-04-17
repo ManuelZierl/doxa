@@ -6,13 +6,15 @@ from doxa.cli.compat import ENGINE_KINDS, MEMORY_KINDS, check_compat, default_en
 def test_memory_kinds_defined() -> None:
     assert "memory" in MEMORY_KINDS
     assert "postgres" in MEMORY_KINDS
-    assert len(MEMORY_KINDS) == 2
+    assert "native" in MEMORY_KINDS
+    assert len(MEMORY_KINDS) == 3
 
 
 def test_engine_kinds_defined() -> None:
     assert "memory" in ENGINE_KINDS
     assert "postgres" in ENGINE_KINDS
-    assert len(ENGINE_KINDS) == 2
+    assert "native" in ENGINE_KINDS
+    assert len(ENGINE_KINDS) == 3
 
 
 def test_check_compat_memory_memory_succeeds() -> None:
