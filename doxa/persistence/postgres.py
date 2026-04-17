@@ -19,9 +19,9 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
+from doxa.core._parsing.parsing_utils import parse_iso_duration
 from doxa.core.belief_record import BeliefRecord
 from doxa.core.branch import Branch
-from doxa.core._parsing.parsing_utils import parse_iso_duration
 from doxa.persistence.repository import BranchRepository
 
 if TYPE_CHECKING:

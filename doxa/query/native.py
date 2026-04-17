@@ -11,11 +11,7 @@ from doxa.core._parsing.parsing_utils import (
     parse_datetime_literal,
     parse_duration_literal,
 )
-from doxa.core.belief_record import (
-    BeliefEntityArg,
-    BeliefLiteralArg,
-    BeliefPredRefArg,
-)
+from doxa.core.belief_record import BeliefEntityArg, BeliefLiteralArg, BeliefPredRefArg
 from doxa.core.branch import Branch
 from doxa.core.builtins import Builtin
 from doxa.core.epistemic_semantics import (
@@ -53,12 +49,7 @@ from doxa.core.rule import (
     RuleHeadPredRefArg,
     RuleHeadVarArg,
 )
-from doxa.query.engine import (
-    EngineInfo,
-    QueryAnswer,
-    QueryEngine,
-    QueryResult,
-)
+from doxa.query.engine import EngineInfo, QueryAnswer, QueryEngine, QueryResult
 
 try:
     from doxa import _native as doxa_native

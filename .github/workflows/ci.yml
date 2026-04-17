@@ -145,8 +145,9 @@ jobs:
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@1.89
-        with:
-          components: rustfmt, clippy
+
+      - name: Install rustfmt and clippy components
+        run: rustup component add rustfmt clippy
 
       - name: Cache Rust dependencies and build outputs
         uses: Swatinem/rust-cache@v2

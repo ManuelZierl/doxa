@@ -6,7 +6,6 @@ engines, including PostgreSQL, do not depend on this module.
 
 from doxa.query import evaluator as _evaluator
 
-
 for _name in dir(_evaluator):
     if _name.startswith("__"):
         continue

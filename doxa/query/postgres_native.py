@@ -52,7 +52,6 @@ from doxa.query.evaluator import (
     _sort_answers,
 )
 
-
 Signature = Tuple[str, int]
 
 

@@ -22,7 +22,6 @@ from doxa.core.literal_type import LiteralType
 from doxa.core.rule import RuleGoalLiteralArg, RuleHeadLiteralArg
 from doxa.core.term_kinds import TermKind
 
-
 # ---------------------------------------------------------------------------
 # Parsing utilities
 # ---------------------------------------------------------------------------

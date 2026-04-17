@@ -49,3 +49,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py311"
+
+[tool.isort]
+profile = "black"
