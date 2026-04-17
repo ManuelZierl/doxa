@@ -6,7 +6,10 @@ use std::sync::RwLock;
 
 use sled::{self, Db, Tree};
 
-use crate::types::{AggregationMode, AtomKey, AtomState, Contribution, EvidenceMode, IndexSpec, PredicateProfile, PredId, SymId};
+use crate::types::{
+    AggregationMode, AtomKey, AtomState, Contribution, EvidenceMode, IndexSpec, PredId,
+    PredicateProfile, SymId,
+};
 
 /// Custom error type for the Doxa store. Wraps errors from sled and bincode.
 #[derive(Debug)]
@@ -20,10 +23,7 @@ pub enum StoreError {
     /// Index not found for the given predicate.
     UnknownIndex { pred_id: PredId, index_name: String },
     /// Invalid argument length for atom key relative to predicate arity.
-    InvalidArity {
-        expected: usize,
-        found: usize,
-    },
+    InvalidArity { expected: usize, found: usize },
     /// Evidence identifier required but missing.
     MissingEvidence,
 }
@@ -34,8 +34,15 @@ impl fmt::Display for StoreError {
             StoreError::Sled(e) => write!(f, "sled error: {}", e),
             StoreError::Bincode(e) => write!(f, "bincode error: {}", e),
             StoreError::UnknownPredicate(id) => write!(f, "unknown predicate id {}", id),
-            StoreError::UnknownIndex { pred_id, index_name } => {
-                write!(f, "unknown index '{}' for predicate id {}", index_name, pred_id)
+            StoreError::UnknownIndex {
+                pred_id,
+                index_name,
+            } => {
+                write!(
+                    f,
+                    "unknown index '{}' for predicate id {}",
+                    index_name, pred_id
+                )
             }
             StoreError::InvalidArity { expected, found } => {
                 write!(f, "arity mismatch: expected {}, found {}", expected, found)
@@ -249,7 +256,8 @@ impl PredicateRegistry {
         self.pred_by_name
             .insert(key.as_bytes(), id.to_be_bytes().as_slice())?;
         let profile_bytes = bincode::serialize(&profile)?;
-        self.pred_profiles.insert(id.to_be_bytes().as_slice(), profile_bytes)?;
+        self.pred_profiles
+            .insert(id.to_be_bytes().as_slice(), profile_bytes)?;
         Ok(profile)
     }
 
@@ -373,12 +381,7 @@ impl DoxaStore {
                 s
             }
             AggregationMode::NoisyOr | AggregationMode::CappedSum => {
-                self.upsert_non_idempotent(
-                    &profile,
-                    &state_key,
-                    &old_state,
-                    contribution,
-                )?
+                self.upsert_non_idempotent(&profile, &state_key, &old_state, contribution)?
             }
         };
         // Persist new state if changed
@@ -493,13 +496,11 @@ impl DoxaStore {
 
     /// Load an [`AtomState`] from the state tree by raw key.
     fn load_state(&self, state_key: &[u8]) -> Result<AtomState> {
-        Ok(
-            if let Some(bytes) = self.state_tree.get(state_key)? {
-                bincode::deserialize(bytes.as_ref())?
-            } else {
-                AtomState::empty()
-            },
-        )
+        Ok(if let Some(bytes) = self.state_tree.get(state_key)? {
+            bincode::deserialize(bytes.as_ref())?
+        } else {
+            AtomState::empty()
+        })
     }
 
     /// Recompute the aggregate state for an atom from all stored
@@ -626,11 +627,7 @@ impl DoxaStore {
 
 /// Apply one aggregation step combining the current state with a single
 /// contribution.
-fn aggregate_pair(
-    mode: &AggregationMode,
-    state: &AtomState,
-    contrib: &Contribution,
-) -> AtomState {
+fn aggregate_pair(mode: &AggregationMode, state: &AtomState, contrib: &Contribution) -> AtomState {
     match mode {
         AggregationMode::Maximum => AtomState {
             b: state.b.max(contrib.b),

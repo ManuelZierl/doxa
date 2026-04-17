@@ -2,7 +2,7 @@
 
 use doxa_core::rule::{AtomGoal, Goal, Rule};
 use doxa_core::types::Term;
-use doxa_edb::{EdbStore, EdbError, GroundFact};
+use doxa_edb::{EdbError, EdbStore, GroundFact};
 
 fn temp_dir() -> tempfile::TempDir {
     tempfile::TempDir::new().expect("create temp dir")
@@ -15,8 +15,20 @@ fn test_assert_and_get_facts() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    let eid1 = store.assert_fact("main", "person", 1, vec![10], 1.0, 0.0, None).unwrap();
-    let eid2 = store.assert_fact("main", "person", 1, vec![20], 0.8, 0.1, Some("source_a".into())).unwrap();
+    let eid1 = store
+        .assert_fact("main", "person", 1, vec![10], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = store
+        .assert_fact(
+            "main",
+            "person",
+            1,
+            vec![20],
+            0.8,
+            0.1,
+            Some("source_a".into()),
+        )
+        .unwrap();
 
     assert!(eid1 < eid2, "event IDs should be monotonically increasing");
 
@@ -43,12 +55,19 @@ fn test_retract_fact() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    let eid1 = store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let eid2 = store.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
+    let eid1 = store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = store
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
 
     // Retract the first fact
     let retract_eid = store.retract_fact("main", eid1).unwrap();
-    assert!(retract_eid > eid2, "retraction event should have a higher ID");
+    assert!(
+        retract_eid > eid2,
+        "retraction event should have a higher ID"
+    );
 
     let facts = store.get_facts("main", None).unwrap();
     assert_eq!(facts.len(), 1);
@@ -60,7 +79,9 @@ fn test_retract_nonexistent_is_harmless() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
+    store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
 
     // Retract an event ID that doesn't exist — should not panic,
     // just creates a retraction event that has no effect.
@@ -77,9 +98,15 @@ fn test_branch_isolation() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    store.assert_fact("branch_a", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    store.assert_fact("branch_b", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
-    store.assert_fact("branch_a", "q", 1, vec![3], 1.0, 0.0, None).unwrap();
+    store
+        .assert_fact("branch_a", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    store
+        .assert_fact("branch_b", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
+    store
+        .assert_fact("branch_a", "q", 1, vec![3], 1.0, 0.0, None)
+        .unwrap();
 
     let facts_a = store.get_facts("branch_a", None).unwrap();
     assert_eq!(facts_a.len(), 2);
@@ -100,9 +127,15 @@ fn test_watermark_visibility() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    let eid1 = store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let eid2 = store.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
-    let _eid3 = store.assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None).unwrap();
+    let eid1 = store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = store
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
+    let _eid3 = store
+        .assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None)
+        .unwrap();
 
     // Only see facts up to eid2
     let facts = store.get_facts("main", Some(eid2)).unwrap();
@@ -117,15 +150,23 @@ fn test_watermark_hides_retraction() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    let eid1 = store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let eid2 = store.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
+    let eid1 = store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = store
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
 
     // Retract eid1 (creates eid3)
     let eid3 = store.retract_fact("main", eid1).unwrap();
 
     // At watermark eid2: retraction hasn't happened yet
     let facts_before = store.get_facts("main", Some(eid2)).unwrap();
-    assert_eq!(facts_before.len(), 2, "both facts visible before retraction");
+    assert_eq!(
+        facts_before.len(),
+        2,
+        "both facts visible before retraction"
+    );
 
     // At watermark eid3: retraction is visible
     let facts_after = store.get_facts("main", Some(eid3)).unwrap();
@@ -219,9 +260,15 @@ fn test_get_events_since() {
     let tmp = temp_dir();
     let store = EdbStore::open(tmp.path()).unwrap();
 
-    let eid1 = store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let eid2 = store.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
-    let eid3 = store.assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None).unwrap();
+    let eid1 = store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = store
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
+    let eid3 = store
+        .assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None)
+        .unwrap();
 
     // Events since eid1 (exclusive) → should get eid2 and eid3
     let delta = store.get_events_since(eid1, None).unwrap();
@@ -250,10 +297,14 @@ fn test_current_watermark() {
     let wm0 = store.current_watermark().unwrap();
     assert_eq!(wm0, 0);
 
-    let eid1 = store.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
+    let eid1 = store
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
     assert_eq!(store.current_watermark().unwrap(), eid1);
 
-    let eid2 = store.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
+    let eid2 = store
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
     assert_eq!(store.current_watermark().unwrap(), eid2);
 }
 
@@ -267,7 +318,9 @@ fn test_edb_persistence_roundtrip() {
     let eid;
     {
         let store = EdbStore::open(&path).unwrap();
-        eid = store.assert_fact("main", "data", 1, vec![42], 0.75, 0.05, None).unwrap();
+        eid = store
+            .assert_fact("main", "data", 1, vec![42], 0.75, 0.05, None)
+            .unwrap();
         store.flush_all().unwrap();
     }
 
@@ -294,17 +347,26 @@ fn test_mixed_events_ordering() {
     let store = EdbStore::open(tmp.path()).unwrap();
 
     let e1 = store.declare_predicate("main", "person", 1).unwrap();
-    let e2 = store.assert_fact("main", "person", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let e3 = store.add_rule("main", Rule {
-        id: 1,
-        head_pred_name: "knows".into(),
-        head_pred_arity: 2,
-        head_args: vec![Term::Var("X".into()), Term::Var("Y".into())],
-        body: vec![],
-        b: 1.0,
-        d: 0.0,
-    }).unwrap();
-    let e4 = store.assert_fact("main", "person", 1, vec![2], 1.0, 0.0, None).unwrap();
+    let e2 = store
+        .assert_fact("main", "person", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let e3 = store
+        .add_rule(
+            "main",
+            Rule {
+                id: 1,
+                head_pred_name: "knows".into(),
+                head_pred_arity: 2,
+                head_args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+                body: vec![],
+                b: 1.0,
+                d: 0.0,
+            },
+        )
+        .unwrap();
+    let e4 = store
+        .assert_fact("main", "person", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
     let e5 = store.retract_fact("main", e2).unwrap();
 
     // All event IDs should be strictly increasing

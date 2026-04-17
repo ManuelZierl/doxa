@@ -196,11 +196,7 @@ impl EdbStore {
     }
 
     /// Retract a previously asserted fact by its original event ID.
-    pub fn retract_fact(
-        &self,
-        branch: &str,
-        target_event_id: EventId,
-    ) -> Result<EventId> {
+    pub fn retract_fact(&self, branch: &str, target_event_id: EventId) -> Result<EventId> {
         let event_id = self.next_event_id()?;
         let event = EdbEvent::RetractFact {
             event_id,
@@ -213,11 +209,7 @@ impl EdbStore {
     /// Scan the event log and return all visible ground facts for a branch,
     /// considering retractions. Only events with `event_id <= watermark`
     /// are included.
-    pub fn get_facts(
-        &self,
-        branch: &str,
-        watermark: Option<EventId>,
-    ) -> Result<Vec<GroundFact>> {
+    pub fn get_facts(&self, branch: &str, watermark: Option<EventId>) -> Result<Vec<GroundFact>> {
         let mut facts: HashMap<EventId, GroundFact> = HashMap::new();
         let mut retracted: HashSet<EventId> = HashSet::new();
 
@@ -277,11 +269,7 @@ impl EdbStore {
     }
 
     /// Return all rules for a branch (up to watermark).
-    pub fn get_rules(
-        &self,
-        branch: &str,
-        watermark: Option<EventId>,
-    ) -> Result<Vec<Rule>> {
+    pub fn get_rules(&self, branch: &str, watermark: Option<EventId>) -> Result<Vec<Rule>> {
         let mut rules = Vec::new();
 
         for item in self.event_tree.iter() {

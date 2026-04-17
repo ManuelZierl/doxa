@@ -49,10 +49,22 @@ pub fn compile_rules(
 
     // First pass: ensure all predicates are registered
     for rule in rules {
-        ensure_predicate(store, &rule.head_pred_name, rule.head_pred_arity, pred_configs, &mut pred_map)?;
+        ensure_predicate(
+            store,
+            &rule.head_pred_name,
+            rule.head_pred_arity,
+            pred_configs,
+            &mut pred_map,
+        )?;
         for goal in &rule.body {
             if let Goal::Atom(ag) = goal {
-                ensure_predicate(store, &ag.pred_name, ag.pred_arity, pred_configs, &mut pred_map)?;
+                ensure_predicate(
+                    store,
+                    &ag.pred_name,
+                    ag.pred_arity,
+                    pred_configs,
+                    &mut pred_map,
+                )?;
             }
         }
     }

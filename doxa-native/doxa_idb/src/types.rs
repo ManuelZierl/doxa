@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 // Re-export shared types from doxa_core so the rest of doxa_idb (and
 // downstream crates) can use a single canonical definition.
 pub use doxa_core::types::{
-    AggregationMode, AtomKey, EvidenceMode, IndexSpec, PredId, PredicateProfile,
-    SymId,
+    AggregationMode, AtomKey, EvidenceMode, IndexSpec, PredId, PredicateProfile, SymId,
 };
 
 /// The epistemic state of a derived atom as stored in the IDB. Fields

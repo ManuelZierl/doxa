@@ -44,11 +44,7 @@ pub fn resolve_term(term: &Term, subst: &Subst) -> Option<SymId> {
 /// For positive atom goals, this scans the IDB for matching facts.
 /// For negated atom goals, it succeeds only if no match exists.
 /// For builtins, it filters the current substitution.
-pub fn eval_goal(
-    store: &DoxaStore,
-    goal: &CompiledGoal,
-    incoming: &[BodyMatch],
-) -> Vec<BodyMatch> {
+pub fn eval_goal(store: &DoxaStore, goal: &CompiledGoal, incoming: &[BodyMatch]) -> Vec<BodyMatch> {
     match goal {
         CompiledGoal::Atom {
             pred_id,
@@ -73,10 +69,8 @@ fn eval_atom_goal(
 
     for bm in incoming {
         // Try to resolve as many args as possible for a point lookup
-        let resolved: Vec<Option<SymId>> = args
-            .iter()
-            .map(|t| resolve_term(t, &bm.subst))
-            .collect();
+        let resolved: Vec<Option<SymId>> =
+            args.iter().map(|t| resolve_term(t, &bm.subst)).collect();
 
         let all_bound = resolved.iter().all(|o| o.is_some());
 
@@ -119,9 +113,7 @@ fn eval_atom_goal(
                     if atom_state.b <= 1e-12 {
                         continue;
                     }
-                    if let Some(ext_subst) =
-                        unify_args(args, &atom_key.args, &bm.subst)
-                    {
+                    if let Some(ext_subst) = unify_args(args, &atom_key.args, &bm.subst) {
                         result.push(BodyMatch {
                             subst: ext_subst,
                             body_b: bm.body_b * atom_state.b,
@@ -139,11 +131,7 @@ fn eval_atom_goal(
 /// Attempt to unify rule args (which may contain variables) with a
 /// ground atom's args, extending the given substitution. Returns None
 /// if unification fails (a variable is already bound to a different value).
-fn unify_args(
-    rule_args: &[Term],
-    ground_args: &[SymId],
-    base_subst: &Subst,
-) -> Option<Subst> {
+fn unify_args(rule_args: &[Term], ground_args: &[SymId], base_subst: &Subst) -> Option<Subst> {
     if rule_args.len() != ground_args.len() {
         return None;
     }
@@ -238,12 +226,20 @@ fn eval_eq(args: &[Term], incoming: &[BodyMatch]) -> Vec<BodyMatch> {
             (Some(av), None) if b_var.is_some() => {
                 let mut s = bm.subst.clone();
                 s.insert(b_var.unwrap().to_string(), av);
-                result.push(BodyMatch { subst: s, body_b: bm.body_b, body_d: bm.body_d });
+                result.push(BodyMatch {
+                    subst: s,
+                    body_b: bm.body_b,
+                    body_d: bm.body_d,
+                });
             }
             (None, Some(bv)) if a_var.is_some() => {
                 let mut s = bm.subst.clone();
                 s.insert(a_var.unwrap().to_string(), bv);
-                result.push(BodyMatch { subst: s, body_b: bm.body_b, body_d: bm.body_d });
+                result.push(BodyMatch {
+                    subst: s,
+                    body_b: bm.body_b,
+                    body_d: bm.body_d,
+                });
             }
             _ => {} // both unbound
         }
@@ -259,7 +255,10 @@ fn eval_ne(args: &[Term], incoming: &[BodyMatch]) -> Vec<BodyMatch> {
     incoming
         .iter()
         .filter(|bm| {
-            match (resolve_term(&args[0], &bm.subst), resolve_term(&args[1], &bm.subst)) {
+            match (
+                resolve_term(&args[0], &bm.subst),
+                resolve_term(&args[1], &bm.subst),
+            ) {
                 (Some(a), Some(b)) => a != b,
                 _ => false,
             }
@@ -351,20 +350,36 @@ fn eval_arithmetic(
                 (BuiltinOp::Mul, 2) => Some(vals[0].unwrap() * vals[1].unwrap()),
                 (BuiltinOp::Mul, 0) => {
                     let d = vals[1].unwrap();
-                    if d.abs() > 1e-12 { Some(vals[2].unwrap() / d) } else { None }
+                    if d.abs() > 1e-12 {
+                        Some(vals[2].unwrap() / d)
+                    } else {
+                        None
+                    }
                 }
                 (BuiltinOp::Mul, 1) => {
                     let d = vals[0].unwrap();
-                    if d.abs() > 1e-12 { Some(vals[2].unwrap() / d) } else { None }
+                    if d.abs() > 1e-12 {
+                        Some(vals[2].unwrap() / d)
+                    } else {
+                        None
+                    }
                 }
                 (BuiltinOp::Div, 2) => {
                     let d = vals[1].unwrap();
-                    if d.abs() > 1e-12 { Some(vals[0].unwrap() / d) } else { None }
+                    if d.abs() > 1e-12 {
+                        Some(vals[0].unwrap() / d)
+                    } else {
+                        None
+                    }
                 }
                 (BuiltinOp::Div, 0) => Some(vals[2].unwrap() * vals[1].unwrap()),
                 (BuiltinOp::Div, 1) => {
                     let d = vals[2].unwrap();
-                    if d.abs() > 1e-12 { Some(vals[0].unwrap() / d) } else { None }
+                    if d.abs() > 1e-12 {
+                        Some(vals[0].unwrap() / d)
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             };
@@ -391,11 +406,7 @@ fn eval_arithmetic(
 }
 
 /// between(X, Low, High): check Low <= X <= High.
-fn eval_between(
-    store: &DoxaStore,
-    args: &[Term],
-    incoming: &[BodyMatch],
-) -> Vec<BodyMatch> {
+fn eval_between(store: &DoxaStore, args: &[Term], incoming: &[BodyMatch]) -> Vec<BodyMatch> {
     if args.len() != 3 {
         return Vec::new();
     }
@@ -417,8 +428,5 @@ fn eval_between(
 /// Ground the head arguments of a compiled rule using a substitution.
 /// Returns None if any variable is unbound.
 pub fn ground_head(head_args: &[Term], subst: &Subst) -> Option<Vec<SymId>> {
-    head_args
-        .iter()
-        .map(|t| resolve_term(t, subst))
-        .collect()
+    head_args.iter().map(|t| resolve_term(t, subst)).collect()
 }

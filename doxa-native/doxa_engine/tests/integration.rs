@@ -33,7 +33,6 @@ fn atom_goal(name: &str, arity: usize, args: Vec<Term>) -> Goal {
     })
 }
 
-
 // ── Test: simple transitive closure ──────────────────────────────────
 
 /// edge(a,b). edge(b,c).
@@ -58,25 +57,45 @@ fn test_transitive_closure() {
     let c = session.intern("c").unwrap();
 
     // Assert EDB facts
-    session.edb.assert_fact("main", "edge", 2, vec![a, b], 1.0, 0.0, None).unwrap();
-    session.edb.assert_fact("main", "edge", 2, vec![b, c], 1.0, 0.0, None).unwrap();
+    session
+        .edb
+        .assert_fact("main", "edge", 2, vec![a, b], 1.0, 0.0, None)
+        .unwrap();
+    session
+        .edb
+        .assert_fact("main", "edge", 2, vec![b, c], 1.0, 0.0, None)
+        .unwrap();
 
     // Add rules to EDB
     // path(X,Y) :- edge(X,Y).
     let r1 = rule(
         1,
-        "path", 2,
+        "path",
+        2,
         vec![Term::Var("X".into()), Term::Var("Y".into())],
-        vec![atom_goal("edge", 2, vec![Term::Var("X".into()), Term::Var("Y".into())])],
+        vec![atom_goal(
+            "edge",
+            2,
+            vec![Term::Var("X".into()), Term::Var("Y".into())],
+        )],
     );
     // path(X,Z) :- path(X,Y), edge(Y,Z).
     let r2 = rule(
         2,
-        "path", 2,
+        "path",
+        2,
         vec![Term::Var("X".into()), Term::Var("Z".into())],
         vec![
-            atom_goal("path", 2, vec![Term::Var("X".into()), Term::Var("Y".into())]),
-            atom_goal("edge", 2, vec![Term::Var("Y".into()), Term::Var("Z".into())]),
+            atom_goal(
+                "path",
+                2,
+                vec![Term::Var("X".into()), Term::Var("Y".into())],
+            ),
+            atom_goal(
+                "edge",
+                2,
+                vec![Term::Var("Y".into()), Term::Var("Z".into())],
+            ),
         ],
     );
 
@@ -89,17 +108,33 @@ fn test_transitive_closure() {
 
     // Check derived path atoms
     let state_ab = session.get_atom_state("path", &[a, b]).unwrap();
-    assert!(state_ab.b > 0.5, "path(a,b) should have belief > 0.5, got {}", state_ab.b);
+    assert!(
+        state_ab.b > 0.5,
+        "path(a,b) should have belief > 0.5, got {}",
+        state_ab.b
+    );
 
     let state_bc = session.get_atom_state("path", &[b, c]).unwrap();
-    assert!(state_bc.b > 0.5, "path(b,c) should have belief > 0.5, got {}", state_bc.b);
+    assert!(
+        state_bc.b > 0.5,
+        "path(b,c) should have belief > 0.5, got {}",
+        state_bc.b
+    );
 
     let state_ac = session.get_atom_state("path", &[a, c]).unwrap();
-    assert!(state_ac.b > 0.5, "path(a,c) should have belief > 0.5, got {}", state_ac.b);
+    assert!(
+        state_ac.b > 0.5,
+        "path(a,c) should have belief > 0.5, got {}",
+        state_ac.b
+    );
 
     // Negative check: path(c,a) should not exist
     let state_ca = session.get_atom_state("path", &[c, a]).unwrap();
-    assert!(state_ca.b < 1e-9, "path(c,a) should have no belief, got {}", state_ca.b);
+    assert!(
+        state_ca.b < 1e-9,
+        "path(c,a) should have no belief, got {}",
+        state_ca.b
+    );
 }
 
 // ── Test: weighted rules with NoisyOr aggregation ────────────────────
@@ -122,8 +157,14 @@ fn test_noisy_or_aggregation() {
 
     let x = session.intern("x_entity").unwrap();
 
-    session.edb.assert_fact("main", "source1", 1, vec![x], 1.0, 0.0, None).unwrap();
-    session.edb.assert_fact("main", "source2", 1, vec![x], 1.0, 0.0, None).unwrap();
+    session
+        .edb
+        .assert_fact("main", "source1", 1, vec![x], 1.0, 0.0, None)
+        .unwrap();
+    session
+        .edb
+        .assert_fact("main", "source2", 1, vec![x], 1.0, 0.0, None)
+        .unwrap();
 
     // derived(X) :- source1(X).  with b=0.6
     let r1 = Rule {
@@ -178,7 +219,10 @@ fn test_edb_fact_lifecycle() {
         session.configure_predicate("data", AggregationMode::Maximum, EvidenceMode::PerSource);
 
         a = session.intern("a").unwrap();
-        eid = session.edb.assert_fact("main", "data", 1, vec![a], 0.9, 0.0, None).unwrap();
+        eid = session
+            .edb
+            .assert_fact("main", "data", 1, vec![a], 0.9, 0.0, None)
+            .unwrap();
 
         session.materialize("main").unwrap();
         let state = session.get_atom_state("data", &[a]).unwrap();
@@ -198,7 +242,11 @@ fn test_edb_fact_lifecycle() {
         session2.materialize("main").unwrap();
 
         let state2 = session2.get_atom_state("data", &[a]).unwrap();
-        assert!(state2.b < 1e-9, "data(a) should be gone after retract, got b={}", state2.b);
+        assert!(
+            state2.b < 1e-9,
+            "data(a) should be gone after retract, got b={}",
+            state2.b
+        );
     }
 }
 
@@ -213,22 +261,41 @@ fn test_grandparent() {
 
     let mut session = EngineSession::open(tmp_edb.path(), tmp_idb.path()).unwrap();
     session.configure_predicate("parent", AggregationMode::Maximum, EvidenceMode::PerSource);
-    session.configure_predicate("grandparent", AggregationMode::Maximum, EvidenceMode::PerSource);
+    session.configure_predicate(
+        "grandparent",
+        AggregationMode::Maximum,
+        EvidenceMode::PerSource,
+    );
 
     let alice = session.intern("alice").unwrap();
     let bob = session.intern("bob").unwrap();
     let charlie = session.intern("charlie").unwrap();
 
-    session.edb.assert_fact("main", "parent", 2, vec![alice, bob], 1.0, 0.0, None).unwrap();
-    session.edb.assert_fact("main", "parent", 2, vec![bob, charlie], 1.0, 0.0, None).unwrap();
+    session
+        .edb
+        .assert_fact("main", "parent", 2, vec![alice, bob], 1.0, 0.0, None)
+        .unwrap();
+    session
+        .edb
+        .assert_fact("main", "parent", 2, vec![bob, charlie], 1.0, 0.0, None)
+        .unwrap();
 
     let r = rule(
         1,
-        "grandparent", 2,
+        "grandparent",
+        2,
         vec![Term::Var("X".into()), Term::Var("Z".into())],
         vec![
-            atom_goal("parent", 2, vec![Term::Var("X".into()), Term::Var("Y".into())]),
-            atom_goal("parent", 2, vec![Term::Var("Y".into()), Term::Var("Z".into())]),
+            atom_goal(
+                "parent",
+                2,
+                vec![Term::Var("X".into()), Term::Var("Y".into())],
+            ),
+            atom_goal(
+                "parent",
+                2,
+                vec![Term::Var("Y".into()), Term::Var("Z".into())],
+            ),
         ],
     );
     session.edb.add_rule("main", r).unwrap();
@@ -236,11 +303,19 @@ fn test_grandparent() {
     let result = session.materialize("main").unwrap();
     assert!(result.atoms_changed > 0);
 
-    let gp = session.get_atom_state("grandparent", &[alice, charlie]).unwrap();
-    assert!(gp.b > 0.5, "grandparent(alice, charlie) should be derived, got b={}", gp.b);
+    let gp = session
+        .get_atom_state("grandparent", &[alice, charlie])
+        .unwrap();
+    assert!(
+        gp.b > 0.5,
+        "grandparent(alice, charlie) should be derived, got b={}",
+        gp.b
+    );
 
     // Negative: grandparent(bob, alice) should not exist
-    let neg = session.get_atom_state("grandparent", &[bob, alice]).unwrap();
+    let neg = session
+        .get_atom_state("grandparent", &[bob, alice])
+        .unwrap();
     assert!(neg.b < 1e-9, "grandparent(bob, alice) should not exist");
 }
 
@@ -251,9 +326,15 @@ fn test_edb_watermark_and_delta() {
     let tmp_edb = temp_dir();
     let edb = doxa_edb::EdbStore::open(tmp_edb.path()).unwrap();
 
-    let eid1 = edb.assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None).unwrap();
-    let eid2 = edb.assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None).unwrap();
-    let eid3 = edb.assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None).unwrap();
+    let eid1 = edb
+        .assert_fact("main", "p", 1, vec![1], 1.0, 0.0, None)
+        .unwrap();
+    let eid2 = edb
+        .assert_fact("main", "p", 1, vec![2], 1.0, 0.0, None)
+        .unwrap();
+    let eid3 = edb
+        .assert_fact("main", "p", 1, vec![3], 1.0, 0.0, None)
+        .unwrap();
 
     // Watermark at eid2 should only see events 1 and 2
     let facts = edb.get_facts("main", Some(eid2)).unwrap();
@@ -284,7 +365,10 @@ fn test_session_flush_and_reopen() {
         session.configure_predicate("fact", AggregationMode::Maximum, EvidenceMode::PerSource);
 
         let a = session.intern("alpha").unwrap();
-        session.edb.assert_fact("main", "fact", 1, vec![a], 0.8, 0.1, None).unwrap();
+        session
+            .edb
+            .assert_fact("main", "fact", 1, vec![a], 0.8, 0.1, None)
+            .unwrap();
         session.materialize("main").unwrap();
         session.flush_all().unwrap();
     }
@@ -299,6 +383,10 @@ fn test_session_flush_and_reopen() {
         session.materialize("main").unwrap();
 
         let state = session.get_atom_state("fact", &[a]).unwrap();
-        assert!((state.b - 0.8).abs() < 0.01, "fact(alpha) b should persist, got {}", state.b);
+        assert!(
+            (state.b - 0.8).abs() < 0.01,
+            "fact(alpha) b should persist, got {}",
+            state.b
+        );
     }
 }

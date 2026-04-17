@@ -36,9 +36,7 @@ fn parse_evidence_mode(s: &str) -> PyResult<EvidenceMode> {
         "none" | "None" => Ok(EvidenceMode::None),
         "per_source" | "PerSource" => Ok(EvidenceMode::PerSource),
         "proof_tree" | "ProofTree" => Ok(EvidenceMode::ProofTree),
-        _ => Err(PyValueError::new_err(format!(
-            "Unknown evidence mode: {s}"
-        ))),
+        _ => Err(PyValueError::new_err(format!("Unknown evidence mode: {s}"))),
     }
 }
 
@@ -64,7 +62,9 @@ fn py_to_term(obj: &Bound<'_, PyAny>) -> PyResult<Term> {
         } else if let Some(v) = dict.get_item("Const")? {
             Ok(Term::Entity(v.extract::<u64>()?))
         } else {
-            Err(PyValueError::new_err("Term dict must have 'Var' or 'Const' key"))
+            Err(PyValueError::new_err(
+                "Term dict must have 'Var' or 'Const' key",
+            ))
         }
     } else {
         Err(PyValueError::new_err("Term must be str, int, or dict"))
@@ -92,9 +92,9 @@ fn parse_builtin_op(name: &str) -> PyResult<BuiltinOp> {
 /// Atom shape: {"pred_name": str, "pred_arity": int, "negated": bool, "args": [...]}
 /// Builtin shape: {"builtin_name": str, "args": [...]}
 fn py_to_goal(obj: &Bound<'_, PyAny>) -> PyResult<Goal> {
-    let dict = obj.downcast::<PyDict>().map_err(|_| {
-        PyValueError::new_err("Goal must be a dict")
-    })?;
+    let dict = obj
+        .downcast::<PyDict>()
+        .map_err(|_| PyValueError::new_err("Goal must be a dict"))?;
 
     // Check if it's a builtin goal
     if let Some(builtin_name) = dict.get_item("builtin_name")? {
@@ -103,9 +103,9 @@ fn py_to_goal(obj: &Bound<'_, PyAny>) -> PyResult<Goal> {
         let args_obj = dict
             .get_item("args")?
             .ok_or_else(|| PyValueError::new_err("Builtin goal missing 'args'"))?;
-        let args_list = args_obj.downcast::<PyList>().map_err(|_| {
-            PyValueError::new_err("Builtin goal 'args' must be a list")
-        })?;
+        let args_list = args_obj
+            .downcast::<PyList>()
+            .map_err(|_| PyValueError::new_err("Builtin goal 'args' must be a list"))?;
         let mut args = Vec::new();
         for item in args_list.iter() {
             args.push(py_to_term(&item)?);
@@ -129,9 +129,9 @@ fn py_to_goal(obj: &Bound<'_, PyAny>) -> PyResult<Goal> {
     let args_list = dict
         .get_item("args")?
         .ok_or_else(|| PyValueError::new_err("Goal missing 'args'"))?;
-    let args_list = args_list.downcast::<PyList>().map_err(|_| {
-        PyValueError::new_err("Goal 'args' must be a list")
-    })?;
+    let args_list = args_list
+        .downcast::<PyList>()
+        .map_err(|_| PyValueError::new_err("Goal 'args' must be a list"))?;
 
     let mut args = Vec::new();
     for item in args_list.iter() {
@@ -161,11 +161,8 @@ impl NativeStore {
     /// Open or create a native store backed by the given paths.
     #[new]
     fn new(edb_path: &str, idb_path: &str) -> PyResult<Self> {
-        let session = EngineSession::open(
-            &PathBuf::from(edb_path),
-            &PathBuf::from(idb_path),
-        )
-        .map_err(to_py_err)?;
+        let session = EngineSession::open(&PathBuf::from(edb_path), &PathBuf::from(idb_path))
+            .map_err(to_py_err)?;
         Ok(Self { session })
     }
 
@@ -195,7 +192,11 @@ impl NativeStore {
         let mut results = Vec::with_capacity(sym_ids.len());
         for id in sym_ids {
             results.push(
-                self.session.idb.symbol_store.get_text(id).map_err(to_py_err)?
+                self.session
+                    .idb
+                    .symbol_store
+                    .get_text(id)
+                    .map_err(to_py_err)?,
             );
         }
         Ok(results)
@@ -300,10 +301,7 @@ impl NativeStore {
             d,
         };
 
-        self.session
-            .edb
-            .add_rule(branch, rule)
-            .map_err(to_py_err)
+        self.session.edb.add_rule(branch, rule).map_err(to_py_err)
     }
 
     /// Get all visible facts for a branch. Returns a list of dicts.
@@ -344,7 +342,10 @@ impl NativeStore {
         branch: &str,
         max_depth: Option<usize>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let result = self.session.materialize_with_options(branch, max_depth).map_err(to_py_err)?;
+        let result = self
+            .session
+            .materialize_with_options(branch, max_depth)
+            .map_err(to_py_err)?;
         let dict = PyDict::new_bound(py);
         dict.set_item("atoms_changed", result.atoms_changed)?;
         dict.set_item("iterations", result.total_iterations)?;
@@ -392,15 +393,9 @@ impl NativeStore {
     /// Query all atoms of a predicate, returning a flat list of tuples:
     /// [(args_list, b, d), ...]
     /// This avoids per-row dict construction overhead.
-    fn query_predicate_bulk(
-        &self,
-        pred_name: &str,
-    ) -> PyResult<Vec<(Vec<u64>, f64, f64)>> {
+    fn query_predicate_bulk(&self, pred_name: &str) -> PyResult<Vec<(Vec<u64>, f64, f64)>> {
         let answers = self.session.query_all(pred_name).map_err(to_py_err)?;
-        Ok(answers
-            .into_iter()
-            .map(|a| (a.args, a.b, a.d))
-            .collect())
+        Ok(answers.into_iter().map(|a| (a.args, a.b, a.d)).collect())
     }
 
     /// Return the current EDB watermark.

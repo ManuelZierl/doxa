@@ -21,11 +21,11 @@
 //! Sets rewriting live above this layer. However, the storage API is
 //! designed to serve those higher layers.
 
-mod types;
 mod store;
+mod types;
 
+pub use crate::store::{DoxaStore, PredicateRegistry, StoreError, SymbolStore};
 pub use crate::types::{
-    AggregationMode, AtomKey, AtomState, Contribution, EvidenceMode, IndexSpec,
-    PredicateProfile, PredId, SymId,
+    AggregationMode, AtomKey, AtomState, Contribution, EvidenceMode, IndexSpec, PredId,
+    PredicateProfile, SymId,
 };
-pub use crate::store::{DoxaStore, SymbolStore, PredicateRegistry, StoreError};

@@ -12,9 +12,7 @@ use doxa_core::scc::compute_sccs;
 use doxa_core::semantics::EpistemicSemantics;
 use doxa_core::types::PredId;
 
-use doxa_idb::{
-    AtomKey, Contribution, DoxaStore, StoreError,
-};
+use doxa_idb::{AtomKey, Contribution, DoxaStore, StoreError};
 
 use crate::join::{self, BodyMatch, Subst};
 
@@ -48,7 +46,11 @@ impl std::fmt::Display for EvalError {
         match self {
             EvalError::Store(e) => write!(f, "store error: {}", e),
             EvalError::MaxIterationsExceeded => {
-                write!(f, "fixpoint did not converge within {} iterations", MAX_ITERATIONS)
+                write!(
+                    f,
+                    "fixpoint did not converge within {} iterations",
+                    MAX_ITERATIONS
+                )
             }
         }
     }
@@ -97,8 +99,7 @@ pub fn evaluate_to_fixpoint(
         }
 
         if scc.recursive {
-            let (iters, changed) =
-                evaluate_recursive_scc(store, &scc_rules, semantics, max_depth)?;
+            let (iters, changed) = evaluate_recursive_scc(store, &scc_rules, semantics, max_depth)?;
             total_iterations += iters;
             atoms_changed += changed;
         } else {
@@ -233,10 +234,7 @@ fn fire_rule(
 }
 
 /// Compute rule applicability based on body truth and semantics.
-fn compute_applicability(
-    bm: &BodyMatch,
-    semantics: &EpistemicSemantics,
-) -> f64 {
+fn compute_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 {
     use doxa_core::semantics::RuleApplicabilitySemantics;
 
     let a = match semantics.rule_applicability {

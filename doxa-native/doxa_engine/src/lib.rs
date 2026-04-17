@@ -30,4 +30,4 @@ mod eval;
 mod join;
 mod session;
 
-pub use session::{EngineSession, QueryResult, QueryAnswer, PredicateAnswer};
+pub use session::{EngineSession, PredicateAnswer, QueryAnswer, QueryResult};

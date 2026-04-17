@@ -104,10 +104,7 @@ pub struct EngineSession {
 
 impl EngineSession {
     /// Create a new engine session with separate EDB and IDB paths.
-    pub fn open(
-        edb_path: impl AsRef<Path>,
-        idb_path: impl AsRef<Path>,
-    ) -> Result<Self> {
+    pub fn open(edb_path: impl AsRef<Path>, idb_path: impl AsRef<Path>) -> Result<Self> {
         let edb = EdbStore::open(edb_path)?;
         let idb = DoxaStore::open(idb_path)?;
         Ok(Self {
@@ -231,11 +228,7 @@ impl EngineSession {
 
     /// Query the IDB for the current state of a specific grounded atom.
     /// Returns an empty epistemic state if the predicate or atom is unknown.
-    pub fn get_atom_state(
-        &self,
-        pred_name: &str,
-        args: &[SymId],
-    ) -> Result<EpistemicState> {
+    pub fn get_atom_state(&self, pred_name: &str, args: &[SymId]) -> Result<EpistemicState> {
         let pred_id = match self.pred_map.get(pred_name).copied() {
             Some(id) => id,
             None => return Ok(EpistemicState::empty()),
@@ -253,13 +246,9 @@ impl EngineSession {
         pred_name: &str,
         args: &[doxa_core::types::Term],
     ) -> Result<Vec<QueryAnswer>> {
-        let pred_id = self
-            .pred_map
-            .get(pred_name)
-            .copied()
-            .ok_or_else(|| {
-                EngineError::Compile(CompileError::UnknownPredicate(pred_name.to_string()))
-            })?;
+        let pred_id = self.pred_map.get(pred_name).copied().ok_or_else(|| {
+            EngineError::Compile(CompileError::UnknownPredicate(pred_name.to_string()))
+        })?;
 
         // If all args are ground, do a point lookup
         let all_ground = args.iter().all(|t| t.is_ground());

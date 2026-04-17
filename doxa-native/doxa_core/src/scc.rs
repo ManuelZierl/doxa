@@ -103,7 +103,16 @@ pub fn compute_sccs(rules: &[Rule]) -> Vec<Scc> {
 
         for &w in &adj[v] {
             if indices[w] == usize::MAX {
-                strongconnect(w, adj, index_counter, stack, on_stack, indices, lowlinks, result);
+                strongconnect(
+                    w,
+                    adj,
+                    index_counter,
+                    stack,
+                    on_stack,
+                    indices,
+                    lowlinks,
+                    result,
+                );
                 lowlinks[v] = lowlinks[v].min(lowlinks[w]);
             } else if on_stack[w] {
                 lowlinks[v] = lowlinks[v].min(indices[w]);
@@ -150,10 +159,7 @@ pub fn compute_sccs(rules: &[Rule]) -> Vec<Scc> {
                 .map(|&idx| pred_list[idx].clone())
                 .collect();
             // Recursive if component has >1 node, or a self-loop
-            let recursive = component.len() > 1
-                || component
-                    .iter()
-                    .any(|&v| adj[v].contains(&v));
+            let recursive = component.len() > 1 || component.iter().any(|&v| adj[v].contains(&v));
             Scc {
                 index: i,
                 predicates,
@@ -195,10 +201,7 @@ mod tests {
     #[test]
     fn test_linear_chain() {
         // c :- b. b :- a.
-        let rules = vec![
-            make_rule("c", 1, &["b"]),
-            make_rule("b", 1, &["a"]),
-        ];
+        let rules = vec![make_rule("c", 1, &["b"]), make_rule("b", 1, &["a"])];
         let sccs = compute_sccs(&rules);
         // a, b, c should each be in their own SCC, none recursive
         assert_eq!(sccs.len(), 3);
@@ -219,10 +222,7 @@ mod tests {
     #[test]
     fn test_mutual_recursion() {
         // a :- b. b :- a.
-        let rules = vec![
-            make_rule("a", 1, &["b"]),
-            make_rule("b", 1, &["a"]),
-        ];
+        let rules = vec![make_rule("a", 1, &["b"]), make_rule("b", 1, &["a"])];
         let sccs = compute_sccs(&rules);
         assert_eq!(sccs.len(), 1);
         assert!(sccs[0].recursive);

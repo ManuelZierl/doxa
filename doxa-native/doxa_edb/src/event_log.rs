@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use doxa_core::types::SymId;
 use doxa_core::rule::Rule;
+use doxa_core::types::SymId;
 
 /// Monotonically increasing event identifier.
 pub type EventId = u64;

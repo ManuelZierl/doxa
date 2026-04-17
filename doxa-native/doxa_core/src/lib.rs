@@ -15,12 +15,12 @@
 //! No storage or evaluation logic lives here — only data definitions and
 //! small helper methods.
 
-pub mod types;
-pub mod semantics;
 pub mod rule;
 pub mod scc;
+pub mod semantics;
+pub mod types;
 
-pub use types::*;
-pub use semantics::*;
 pub use rule::*;
 pub use scc::*;
+pub use semantics::*;
+pub use types::*;

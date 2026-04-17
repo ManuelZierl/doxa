@@ -14,4 +14,4 @@ mod event_log;
 mod store;
 
 pub use event_log::{EdbEvent, EventId};
-pub use store::{EdbStore, EdbError, GroundFact};
+pub use store::{EdbError, EdbStore, GroundFact};
