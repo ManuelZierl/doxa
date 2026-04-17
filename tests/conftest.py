@@ -1,6 +1,9 @@
 import json
 import os
 import subprocess
+import warnings
+
+import pytest
 
 
 def _ensure_docker_host():
@@ -52,6 +55,11 @@ def pytest_configure(config):
         # Docker not available or testcontainers not installed — tests
         # that need Postgres will be skipped by their own guards.
         config._pg_container = None
+        warnings.warn(
+            pytest.PytestWarning(
+                "Could not start PostgreSQL test container; tests requiring Postgres may be skipped."
+            )
+        )
 
 
 def pytest_unconfigure(config):

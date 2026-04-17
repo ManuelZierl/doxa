@@ -113,10 +113,10 @@ pytest
 ## Native Build Prerequisites
 
 - Python `>=3.11`
-- Rust toolchain `1.77.2` (policy pinned in `rust-toolchain.toml`)
+- Rust toolchain `1.89` (pinned in `rust-toolchain.toml` and CI)
 - A working C/C++ compiler toolchain (`build-essential` on Linux, Xcode CLT on macOS, MSVC Build Tools on Windows)
 
-Prebuilt wheels are published for Linux/macOS/Windows. The prerequisites above are required when building from source.
+Prebuilt wheels are published for Linux/macOS/Windows on CPython 3.11-3.13. The prerequisites above are required when building from source.
 
 ## Backend Matrix
 

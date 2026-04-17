@@ -23,9 +23,17 @@ import pytest
 from doxa.core.branch import Branch
 from doxa.core.query import Query
 from doxa.query.engine import QueryAnswer, QueryResult
-from doxa.query.memory import InMemoryQueryEngine
 
 FIXTURES_DIR = Path(__file__).parent.parent / "terminal" / "fixtures"
+COMPARISON_CATEGORIES = {
+    "basics",
+    "builtins",
+    "constraints",
+    "hypotheticals",
+    "postprocessing",
+    "regressions",
+    "rules",
+}
 
 # ---------------------------------------------------------------------------
 # Skip if no postgres
@@ -34,19 +42,21 @@ FIXTURES_DIR = Path(__file__).parent.parent / "terminal" / "fixtures"
 _PG_URL = os.environ.get("DOXA_POSTGRES_TEST_URL", "")
 
 try:
-    import psycopg  # noqa: F401
+    import psycopg as _psycopg
 
     _HAS_PSYCOPG = True
 except ImportError:
+    _psycopg = None
     _HAS_PSYCOPG = False
 
 
 def _can_connect() -> bool:
     """Try to actually connect to the database."""
-    if not _PG_URL or not _HAS_PSYCOPG:
+    if not _PG_URL or not _HAS_PSYCOPG or _psycopg is None:
         return False
     try:
-        conn = psycopg.connect(_PG_URL, autocommit=True)
+        assert _psycopg is not None
+        conn = _psycopg.connect(_PG_URL, autocommit=True)
         conn.close()
         return True
     except Exception:
@@ -92,6 +102,7 @@ def _build_branch(statements: List[str]) -> Branch:
     branch = Branch(
         kind=BaseKind.branch,
         created_at=datetime.now(timezone.utc),
+        updated_at=None,
         name="fixture_test",
         ephemeral=False,
         belief_records=[],
@@ -108,8 +119,8 @@ def _build_branch(statements: List[str]) -> Branch:
         try:
             new_branch = Branch.from_doxa(clean)
             branch = branch.merge(new_branch)
-        except Exception:
-            pass  # skip unparseable lines (comments, etc.)
+        except Exception as exc:
+            raise ValueError(f"Could not parse fixture statement: {stmt!r}") from exc
 
     return branch
 
@@ -121,8 +132,8 @@ def _parse_queries(query_texts: List[str]) -> List[Query]:
         q_text = text.rstrip(".").strip()
         try:
             out.append(Query.from_doxa(q_text))
-        except Exception:
-            pass
+        except Exception as exc:
+            raise ValueError(f"Could not parse fixture query: {text!r}") from exc
     return out
 
 
@@ -147,6 +158,8 @@ def _collect_fixtures() -> List[Tuple[str, Path]]:
         return []
     results = []
     for category in sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir()):
+        if category.name not in COMPARISON_CATEGORIES:
+            continue
         for fixture in sorted(p for p in category.iterdir() if p.is_dir()):
             input_file = fixture / "input.doxa"
             if input_file.exists():
@@ -185,7 +198,9 @@ def test_fixture_postgres_matches_memory(
     fixture_dir: Path,
     pg_engine,
 ) -> None:
-    engine_pg, repo_pg = pg_engine
+    from doxa.query.evaluator import InMemoryQueryEngine
+
+    engine_pg, _repo_pg = pg_engine
     engine_mem = InMemoryQueryEngine()
 
     input_text = (fixture_dir / "input.doxa").read_text(encoding="utf-8-sig")

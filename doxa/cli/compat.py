@@ -26,7 +26,8 @@ def check_compat(memory: str, engine: str) -> None:
     if not _COMPAT[key]:
         raise ValueError(
             f"--memory {memory!r} and --engine {engine!r} are incompatible. "
-            "Use matching backends (both 'memory' or both 'postgres')."
+            "Use a supported pair: ('memory', 'memory'), ('memory', 'native'), "
+            "('native', 'memory'), ('native', 'native'), or ('postgres', 'postgres')."
         )
 
 
