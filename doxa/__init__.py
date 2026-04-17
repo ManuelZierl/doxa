@@ -1,1 +1,1 @@
-"""AX – A logic-programming knowledge base toolkit."""
+"""Doxa - A logic-programming knowledge base toolkit."""

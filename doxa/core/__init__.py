@@ -1,4 +1,4 @@
-"""Core Pydantic schema models for the AX language."""
+"""Core Pydantic schema models for the Doxa language."""
 
 from doxa.core.annotate_mixin import AnnotateMixin, DescriptionMixin
 from doxa.core.audit_mixin import AuditMixin

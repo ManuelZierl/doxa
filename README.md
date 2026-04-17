@@ -87,7 +87,7 @@ For the full formal syntax, semantics, builtins, query options, and edge cases s
 |---------------------|-------------------------------------------|
 | `doxa/core/`        | Core language model types and parsing     |
 | `doxa/query/`       | Query execution engine                    |
-| `doxa/persistence/` | Storage backends (in-memory, PostgreSQL)  |
+| `doxa/persistence/` | Storage backends (memory, native, PostgreSQL) |
 | `doxa/cli/`         | CLI entry points and interactive terminal |
 | `tests/`            | Automated tests and fixtures              |
 
@@ -95,10 +95,12 @@ For the full formal syntax, semantics, builtins, query options, and edge cases s
 
 ```bash
 pip install -e .            # install
-pip install -e ".[postgres]" # optional PostgreSQL backend
+pip install -e ".[postgres]" # optional PostgreSQL backend dependencies
 pytest                       # run tests
 doxa                         # launch interactive terminal
 ```
+
+The CLI supports `memory`, `native`, and `postgres` backends via `--memory` and `--engine`.
 
 **Requires Python ≥ 3.11**
 

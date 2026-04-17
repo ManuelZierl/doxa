@@ -1,4 +1,4 @@
-"""Persistence layer – swappable backends for storing AX branches."""
+"""Persistence layer - swappable backends for storing Doxa branches."""
 
 from doxa.persistence.repository import BranchRepository
 

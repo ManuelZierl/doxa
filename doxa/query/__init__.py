@@ -1,4 +1,4 @@
-"""Query evaluation layer – swappable engines for evaluating AX queries."""
+"""Query evaluation layer - swappable engines for evaluating Doxa queries."""
 
 from doxa.query.engine import QueryEngine, QueryResult
 

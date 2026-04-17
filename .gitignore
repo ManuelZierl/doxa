@@ -31,6 +31,12 @@ Thumbs.db
 *.db
 *.log
 
+# Packaging artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
 # Project-specific scratch/temp artifacts
 temp.md
 pytest-cache-files-*/
