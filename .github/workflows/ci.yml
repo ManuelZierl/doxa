@@ -13,9 +13,47 @@ on:
       - develop
 
 jobs:
-  test:
-    name: Run Tests
+  changes:
+    name: Detect Changed Areas
     runs-on: ubuntu-latest
+    outputs:
+      run_all: ${{ steps.scope.outputs.run_all }}
+      python_changed: ${{ steps.filter.outputs.python }}
+      rust_changed: ${{ steps.filter.outputs.rust }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide test scope
+        id: scope
+        run: |
+          echo "run_all=${{ (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}" >> "$GITHUB_OUTPUT"
+
+      - name: Detect changed files
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - 'doxa/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - '.github/workflows/ci.yml'
+            rust:
+              - 'doxa-native/**'
+              - '.github/workflows/ci.yml'
+
+  python_tests:
+    name: Run Python Tests
+    needs:
+      - changes
+    if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -31,6 +69,9 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@1.89
 
+      - name: Cache Rust dependencies and build outputs
+        uses: Swatinem/rust-cache@v2
+
       - name: Show toolchain versions
         run: |
           python --version
@@ -42,14 +83,71 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,postgres]"
+          python -m pip install pytest-cov
 
-      - name: Run test suite
-        run: pytest -vv -ra
+      - name: Run Python test suite
+        run: |
+          mkdir -p coverage
+          pytest -vv -ra --cov=doxa --cov-report=term-missing:skip-covered --cov-report=xml:coverage/python-coverage.xml
+
+      - name: Upload Python coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: coverage/python-coverage.xml
+          flags: python
+          name: python-coverage
+          fail_ci_if_error: true
+
+  rust_tests:
+    name: Run Rust Tests
+    needs:
+      - changes
+    if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.rust_changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@1.89
+
+      - name: Cache Rust dependencies and build outputs
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Show Rust toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Run Rust test suite with coverage
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov --workspace --all-targets --lcov --output-path coverage/rust-coverage.lcov
+        working-directory: doxa-native
+
+      - name: Upload Rust coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: doxa-native/coverage/rust-coverage.lcov
+          flags: rust
+          name: rust-coverage
+          fail_ci_if_error: true
 
   release_checks:
     name: Release Checks
     needs:
-      - test
+      - python_tests
+      - rust_tests
     runs-on: ubuntu-latest
     if: |
       startsWith(github.ref, 'refs/tags/v') &&
@@ -148,6 +246,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Cache Rust dependencies and build outputs
+        uses: Swatinem/rust-cache@v2
 
       - name: Build wheel
         uses: PyO3/maturin-action@v1
