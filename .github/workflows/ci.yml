@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@1.77.2
+        uses: dtolnay/rust-toolchain@1.89
 
       - name: Show toolchain versions
         run: |
@@ -109,7 +109,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           maturin-version: latest
-          rust-toolchain: 1.77.2
+          rust-toolchain: 1.89
           command: sdist
           args: --out dist
 
@@ -153,7 +153,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           maturin-version: latest
-          rust-toolchain: 1.77.2
+          rust-toolchain: 1.89
           command: build
           args: --release --out dist --interpreter python
 
