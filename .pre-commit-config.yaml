@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10
+    hooks:
+      - id: ruff-format
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10
+    hooks:
+      - id: ruff-check
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt-check
+        name: cargo fmt (check)
+        entry: cargo
+        language: system
+        pass_filenames: false
+        files: ^doxa-native/
+        types: [rust]
+        args: [fmt, --manifest-path, doxa-native/Cargo.toml, --all, --, --check]
+      - id: cargo-clippy
+        name: cargo clippy (deny warnings)
+        entry: cargo
+        language: system
+        pass_filenames: false
+        files: ^doxa-native/
+        types: [rust]
+        args: [clippy, --manifest-path, doxa-native/Cargo.toml, --workspace, --all-targets, --all-features, --, -D, warnings]

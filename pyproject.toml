@@ -25,6 +25,8 @@ postgres = [
     "psycopg[binary]>=3.1",
 ]
 dev = [
+    "isort",
+    "pre-commit",
     "pytest>=8.0",
     "ruff",
     "testcontainers[postgres]>=4.0",

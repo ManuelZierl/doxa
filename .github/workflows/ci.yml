@@ -41,14 +41,17 @@ jobs:
               - 'doxa/**'
               - 'tests/**'
               - 'pyproject.toml'
+              - '.pre-commit-config.yaml'
               - '.github/workflows/ci.yml'
             rust:
               - 'doxa-native/**'
+              - '.pre-commit-config.yaml'
               - '.github/workflows/ci.yml'
 
   python_tests:
     name: Run Python Tests
     needs:
+      - python_lint
       - changes
     if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.python_changed == 'true'
     runs-on: ubuntu-latest
@@ -100,9 +103,64 @@ jobs:
           name: python-coverage
           fail_ci_if_error: true
 
+  python_lint:
+    name: Python Formatting & Lint Checks
+    needs:
+      - changes
+    if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.python_changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Enforce formatting and linting (read-only)
+        run: |
+          ruff format --check .
+          isort --check-only .
+          ruff check .
+
+  rust_lint:
+    name: Rust Format & Lint Checks
+    needs:
+      - changes
+    if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.rust_changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@1.89
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies and build outputs
+        uses: Swatinem/rust-cache@v2
+
+      - name: Enforce formatting and linting (read-only)
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+        working-directory: doxa-native
+
   rust_tests:
     name: Run Rust Tests
     needs:
+      - rust_lint
       - changes
     if: needs.changes.outputs.run_all == 'true' || needs.changes.outputs.rust_changed == 'true'
     runs-on: ubuntu-latest
