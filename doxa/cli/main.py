@@ -4,6 +4,7 @@ Usage
 -----
   doxa                                  Start terminal (in-memory backend)
   doxa --tmp                            Alias for in-memory (explicit ephemeral flag)
+  doxa --memory native                  Use native Rust backend (persists to .doxa_native/)
   doxa --memory postgres                Use PostgreSQL backend
   doxa --engine postgres                Use PostgreSQL query engine
   doxa --memory postgres --engine postgres
@@ -33,13 +34,22 @@ def _make_repo(memory_kind: str):
 
         return InMemoryBranchRepository()
     elif memory_kind == "native":
+        import os
         import tempfile
 
         from doxa.persistence.native import NativeBranchRepository
 
-        edb_dir = tempfile.mkdtemp(prefix="doxa_edb_")
-        idb_dir = tempfile.mkdtemp(prefix="doxa_idb_")
-        return NativeBranchRepository(edb_dir, idb_dir)
+        native_dir = os.environ.get("DOXA_NATIVE_DIR")
+        if native_dir:
+            base = Path(native_dir)
+            edb_path = base / "edb"
+            idb_path = base / "idb"
+            edb_path.mkdir(parents=True, exist_ok=True)
+            idb_path.mkdir(parents=True, exist_ok=True)
+        else:
+            edb_path = Path(tempfile.mkdtemp(prefix="doxa_edb_"))
+            idb_path = Path(tempfile.mkdtemp(prefix="doxa_idb_"))
+        return NativeBranchRepository(str(edb_path), str(idb_path))
     elif memory_kind == "postgres":
         import os
 

@@ -100,6 +100,12 @@ class TestParseIsoDuration:
         with pytest.raises(ValueError, match="Invalid ISO 8601 duration"):
             parse_iso_duration("not_valid")
 
+    def test_negative_duration(self) -> None:
+        assert parse_iso_duration("-P1D") == timedelta(days=-1)
+
+    def test_negative_duration_time(self) -> None:
+        assert parse_iso_duration("-PT2H30M") == timedelta(hours=-2, minutes=-30)
+
 
 # ---------------------------------------------------------------------------
 # Rendering utilities
@@ -162,6 +168,11 @@ class TestRoundtrip:
         td = parse_duration_literal(original)
         assert render_duration_literal(td) == original
 
+    def test_negative_duration_roundtrip(self) -> None:
+        td = timedelta(days=-1)
+        rendered = render_duration_literal(td)
+        assert parse_iso_duration(rendered[4:-1]) == td
+
 
 # ---------------------------------------------------------------------------
 # BeliefLiteralArg
@@ -194,6 +205,16 @@ class TestBeliefLiteralArgTemporal:
                 term_kind=TermKind.lit,
                 lit_type=LiteralType.date,
                 value="not-a-date",
+            )
+
+    def test_validator_rejects_datetime_for_date(self) -> None:
+        """datetime is a subclass of date; the validator must reject it for lit_type=date."""
+        with pytest.raises(ValidationError):
+            BeliefLiteralArg(
+                kind=BaseKind.belief_arg,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.date,
+                value=datetime(2024, 6, 15, tzinfo=timezone.utc),
             )
 
     def test_validator_rejects_wrong_datetime_value(self) -> None:
@@ -272,6 +293,34 @@ class TestRuleLiteralArgTemporal:
         arg = RuleGoalLiteralArg.from_doxa('dur"PT30M"')
         assert arg.lit_type == LiteralType.duration
         assert arg.value == timedelta(minutes=30)
+
+    def test_rule_head_rejects_datetime_for_date(self) -> None:
+        """datetime is a subclass of date; the validator must reject it for lit_type=date."""
+        from doxa.core.base_kinds import BaseKind
+        from doxa.core.term_kinds import TermKind
+
+        with pytest.raises(ValidationError):
+            RuleHeadLiteralArg(
+                kind=BaseKind.rule_head_arg,
+                pos=0,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.date,
+                value=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            )
+
+    def test_rule_goal_rejects_datetime_for_date(self) -> None:
+        """datetime is a subclass of date; the validator must reject it for lit_type=date."""
+        from doxa.core.base_kinds import BaseKind
+        from doxa.core.term_kinds import TermKind
+
+        with pytest.raises(ValidationError):
+            RuleGoalLiteralArg(
+                kind=BaseKind.rule_goal_arg,
+                pos=0,
+                term_kind=TermKind.lit,
+                lit_type=LiteralType.date,
+                value=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            )
 
 
 # ---------------------------------------------------------------------------

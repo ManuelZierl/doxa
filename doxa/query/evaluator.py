@@ -230,6 +230,8 @@ def _term(arg: Any) -> _Term:
         return _VarTerm(arg.var.name)
     if hasattr(arg, "ent_name"):
         return _GroundTerm(arg.ent_name)
+    if hasattr(arg, "pred_ref_name"):
+        return _GroundTerm(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
     if hasattr(arg, "value"):
         return _GroundTerm(arg.value)
     raise TypeError(f"Unsupported arg type for compilation: {type(arg)!r}")
@@ -240,6 +242,8 @@ def _prefixed_term(arg: Any, prefix: str) -> _Term:
         return _VarTerm(prefix + arg.var.name)
     if hasattr(arg, "ent_name"):
         return _GroundTerm(arg.ent_name)
+    if hasattr(arg, "pred_ref_name"):
+        return _GroundTerm(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
     if hasattr(arg, "value"):
         return _GroundTerm(arg.value)
     raise TypeError(f"Unsupported arg type for compilation: {type(arg)!r}")
@@ -421,6 +425,8 @@ def _belief_arg_value(arg: BeliefArg) -> Any:
         return arg.ent_name
     if isinstance(arg, BeliefLiteralArg):
         return arg.value
+    if hasattr(arg, "pred_ref_name"):
+        return f"{arg.pred_ref_name}/{arg.pred_ref_arity}"
     raise TypeError(f"Unsupported belief arg type: {type(arg)!r}")
 
 

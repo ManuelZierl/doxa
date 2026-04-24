@@ -307,10 +307,15 @@ def parse_duration_literal(s: str) -> timedelta:
 def parse_iso_duration(s: str) -> timedelta:
     """Parse an ISO 8601 duration string into a timedelta.
 
-    Supports P[nY][nM][nD][T[nH][nM][nS]].
+    Supports [-]P[nY][nM][nD][T[nH][nM][nS]].
+    An optional leading '-' produces a negative duration.
     Years are converted to 365 days, months to 30 days (fixed-unit, not calendar-aware).
     """
-    m = _ISO_DURATION_RE.fullmatch(s.strip())
+    stripped = s.strip()
+    negative = stripped.startswith("-")
+    if negative:
+        stripped = stripped[1:]
+    m = _ISO_DURATION_RE.fullmatch(stripped)
     if not m:
         raise ValueError(f"Invalid ISO 8601 duration: {s!r}")
 
@@ -331,13 +336,14 @@ def parse_iso_duration(s: str) -> timedelta:
         and seconds == 0.0
     ):
         # "P" alone or "PT" alone with no components is invalid
-        if s.strip() == "P" or s.strip() == "PT":
+        if stripped == "P" or stripped == "PT":
             raise ValueError(f"Invalid ISO 8601 duration: {s!r} (no components)")
 
     total_days = years * 365 + months * 30 + days
     total_seconds = hours * 3600 + minutes * 60 + seconds
 
-    return timedelta(days=total_days, seconds=total_seconds)
+    result = timedelta(days=total_days, seconds=total_seconds)
+    return -result if negative else result
 
 
 def render_date_literal(d: date) -> str:

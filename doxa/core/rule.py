@@ -305,7 +305,7 @@ class RuleHeadLiteralArg(Base):
             raise ValueError(
                 "Rule head literal with lit_type='float' must use a float value."
             )
-        if self.lit_type == LiteralType.date and not isinstance(self.value, _dt.date):
+        if self.lit_type == LiteralType.date and type(self.value) is not _dt.date:
             raise ValueError(
                 "Rule head literal with lit_type='date' must use a date value."
             )
@@ -628,7 +628,7 @@ class RuleGoalLiteralArg(Base):
             raise ValueError(
                 "Rule goal literal with lit_type='float' must use a float value."
             )
-        if self.lit_type == LiteralType.date and not isinstance(self.value, _dt.date):
+        if self.lit_type == LiteralType.date and type(self.value) is not _dt.date:
             raise ValueError(
                 "Rule goal literal with lit_type='date' must use a date value."
             )
