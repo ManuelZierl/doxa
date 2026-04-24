@@ -24,6 +24,58 @@ pub struct Scc {
     pub recursive: bool,
 }
 
+struct TarjanState {
+    index_counter: usize,
+    stack: Vec<usize>,
+    on_stack: Vec<bool>,
+    indices: Vec<usize>,
+    lowlinks: Vec<usize>,
+    result: Vec<Vec<usize>>,
+}
+
+impl TarjanState {
+    fn new(n: usize) -> Self {
+        Self {
+            index_counter: 0,
+            stack: Vec::new(),
+            on_stack: vec![false; n],
+            indices: vec![usize::MAX; n],
+            lowlinks: vec![0usize; n],
+            result: Vec::new(),
+        }
+    }
+
+    fn strongconnect(&mut self, v: usize, adj: &[Vec<usize>]) {
+        self.indices[v] = self.index_counter;
+        self.lowlinks[v] = self.index_counter;
+        self.index_counter += 1;
+        self.stack.push(v);
+        self.on_stack[v] = true;
+
+        for &w in &adj[v] {
+            if self.indices[w] == usize::MAX {
+                self.strongconnect(w, adj);
+                self.lowlinks[v] = self.lowlinks[v].min(self.lowlinks[w]);
+            } else if self.on_stack[w] {
+                self.lowlinks[v] = self.lowlinks[v].min(self.indices[w]);
+            }
+        }
+
+        if self.lowlinks[v] == self.indices[v] {
+            let mut component = Vec::new();
+            loop {
+                let w = self.stack.pop().unwrap();
+                self.on_stack[w] = false;
+                component.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            self.result.push(component);
+        }
+    }
+}
+
 /// Build the predicate dependency graph from a set of rules and compute
 /// SCCs in reverse topological order (leaves first, roots last).
 ///
@@ -36,9 +88,7 @@ pub fn compute_sccs(rules: &[Rule]) -> Vec<Scc> {
 
     for rule in rules {
         preds.insert(rule.head_pred_name.clone());
-        let entry = edges
-            .entry(rule.head_pred_name.clone())
-            .or_insert_with(HashSet::new);
+        let entry = edges.entry(rule.head_pred_name.clone()).or_default();
         for goal in &rule.body {
             match goal {
                 crate::rule::Goal::Atom(ag) if !ag.negated => {
@@ -52,7 +102,7 @@ pub fn compute_sccs(rules: &[Rule]) -> Vec<Scc> {
 
     // Ensure all preds have an entry
     for p in &preds {
-        edges.entry(p.clone()).or_insert_with(HashSet::new);
+        edges.entry(p.clone()).or_default();
     }
 
     // 2. Tarjan's SCC algorithm
@@ -78,79 +128,18 @@ pub fn compute_sccs(rules: &[Rule]) -> Vec<Scc> {
         })
         .collect();
 
-    let mut index_counter: usize = 0;
-    let mut stack: Vec<usize> = Vec::new();
-    let mut on_stack = vec![false; n];
-    let mut indices = vec![usize::MAX; n];
-    let mut lowlinks = vec![0usize; n];
-    let mut result: Vec<Vec<usize>> = Vec::new();
-
-    fn strongconnect(
-        v: usize,
-        adj: &[Vec<usize>],
-        index_counter: &mut usize,
-        stack: &mut Vec<usize>,
-        on_stack: &mut [bool],
-        indices: &mut [usize],
-        lowlinks: &mut [usize],
-        result: &mut Vec<Vec<usize>>,
-    ) {
-        indices[v] = *index_counter;
-        lowlinks[v] = *index_counter;
-        *index_counter += 1;
-        stack.push(v);
-        on_stack[v] = true;
-
-        for &w in &adj[v] {
-            if indices[w] == usize::MAX {
-                strongconnect(
-                    w,
-                    adj,
-                    index_counter,
-                    stack,
-                    on_stack,
-                    indices,
-                    lowlinks,
-                    result,
-                );
-                lowlinks[v] = lowlinks[v].min(lowlinks[w]);
-            } else if on_stack[w] {
-                lowlinks[v] = lowlinks[v].min(indices[w]);
-            }
-        }
-
-        if lowlinks[v] == indices[v] {
-            let mut component = Vec::new();
-            loop {
-                let w = stack.pop().unwrap();
-                on_stack[w] = false;
-                component.push(w);
-                if w == v {
-                    break;
-                }
-            }
-            result.push(component);
-        }
-    }
+    let mut tarjan = TarjanState::new(n);
 
     for v in 0..n {
-        if indices[v] == usize::MAX {
-            strongconnect(
-                v,
-                &adj,
-                &mut index_counter,
-                &mut stack,
-                &mut on_stack,
-                &mut indices,
-                &mut lowlinks,
-                &mut result,
-            );
+        if tarjan.indices[v] == usize::MAX {
+            tarjan.strongconnect(v, &adj);
         }
     }
 
     // Tarjan naturally produces SCCs with sinks (leaves) first, which is
     // exactly the bottom-up evaluation order we need.
-    result
+    tarjan
+        .result
         .into_iter()
         .enumerate()
         .map(|(i, component)| {

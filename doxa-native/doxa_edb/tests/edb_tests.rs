@@ -2,7 +2,7 @@
 
 use doxa_core::rule::{AtomGoal, Goal, Rule};
 use doxa_core::types::Term;
-use doxa_edb::{EdbError, EdbStore, GroundFact};
+use doxa_edb::EdbStore;
 
 fn temp_dir() -> tempfile::TempDir {
     tempfile::TempDir::new().expect("create temp dir")

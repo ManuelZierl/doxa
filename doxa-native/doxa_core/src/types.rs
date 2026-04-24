@@ -175,9 +175,10 @@ pub struct Contribution {
 // ── Predicate metadata ───────────────────────────────────────────────
 
 /// Aggregation mode for combining contributions.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AggregationMode {
     /// Componentwise maximum (idempotent).
+    #[default]
     Maximum,
     /// Noisy-OR: `1 - ∏(1 - cᵢ)`.
     NoisyOr,
@@ -185,27 +186,16 @@ pub enum AggregationMode {
     CappedSum,
 }
 
-impl Default for AggregationMode {
-    fn default() -> Self {
-        AggregationMode::Maximum
-    }
-}
-
 /// Evidence tracking mode.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EvidenceMode {
     /// No evidence tracking.
+    #[default]
     None,
     /// Track by source identifier.
     PerSource,
     /// Track by full proof-tree signature.
     ProofTree,
-}
-
-impl Default for EvidenceMode {
-    fn default() -> Self {
-        EvidenceMode::None
-    }
 }
 
 /// A secondary index specification for a predicate.

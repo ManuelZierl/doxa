@@ -143,6 +143,10 @@ impl EdbStore {
     }
 
     /// Assert a ground fact. Returns the event ID.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public EDB API keeps fact fields explicit"
+    )]
     pub fn assert_fact(
         &self,
         branch: &str,
@@ -339,7 +343,7 @@ impl EdbStore {
                 .try_into()
                 .unwrap(),
         );
-        Ok(if next > 1 { next - 1 } else { 0 })
+        Ok(next.saturating_sub(1))
     }
 
     /// Return events since a given event ID (exclusive), up to watermark.

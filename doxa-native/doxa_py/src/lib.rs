@@ -4,6 +4,8 @@
 //! fixpoint engine, providing a flat API for the Python wrapper classes
 //! (`NativeBranchRepository`, `NativeQueryEngine`).
 
+#![allow(clippy::useless_conversion)]
+
 use std::path::PathBuf;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -13,6 +15,8 @@ use pyo3::types::{PyDict, PyList};
 use doxa_core::rule::{AtomGoal, BuiltinGoal, BuiltinOp, Goal, Rule as RustRule};
 use doxa_core::types::{AggregationMode, EvidenceMode, Term};
 use doxa_engine::EngineSession;
+
+type FactInput = (String, usize, Vec<u64>, f64, f64, Option<String>);
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -161,7 +165,7 @@ impl NativeStore {
     /// Open or create a native store backed by the given paths.
     #[new]
     fn new(edb_path: &str, idb_path: &str) -> PyResult<Self> {
-        let session = EngineSession::open(&PathBuf::from(edb_path), &PathBuf::from(idb_path))
+        let session = EngineSession::open(PathBuf::from(edb_path), PathBuf::from(idb_path))
             .map_err(to_py_err)?;
         Ok(Self { session })
     }
@@ -226,6 +230,10 @@ impl NativeStore {
 
     /// Assert a ground fact in the EDB. Returns the event ID.
     #[pyo3(signature = (branch, pred_name, pred_arity, args, b, d, source=None))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Python API keeps fact fields explicit"
+    )]
     fn assert_fact(
         &self,
         branch: &str,
@@ -245,11 +253,7 @@ impl NativeStore {
     /// Assert multiple facts at once. Each fact is a tuple:
     /// (pred_name, pred_arity, args, b, d, source_or_none)
     /// Returns the number of facts asserted.
-    fn assert_facts_bulk(
-        &self,
-        branch: &str,
-        facts: Vec<(String, usize, Vec<u64>, f64, f64, Option<String>)>,
-    ) -> PyResult<usize> {
+    fn assert_facts_bulk(&self, branch: &str, facts: Vec<FactInput>) -> PyResult<usize> {
         let count = facts.len();
         for (pred_name, pred_arity, args, b, d, source) in facts {
             self.session
@@ -270,6 +274,10 @@ impl NativeStore {
 
     /// Add a rule to the EDB. Takes a dict with the rule structure.
     /// Returns the event ID.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Python API mirrors rule literal fields"
+    )]
     fn add_rule(
         &self,
         branch: &str,

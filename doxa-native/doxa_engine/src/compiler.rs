@@ -93,21 +93,11 @@ pub fn compile_rules(
 }
 
 /// Per-predicate configuration hints for the compiler.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PredConfig {
     pub aggregation: AggregationMode,
     pub evidence_mode: EvidenceMode,
     pub indexes: Vec<IndexSpec>,
-}
-
-impl Default for PredConfig {
-    fn default() -> Self {
-        Self {
-            aggregation: AggregationMode::default(),
-            evidence_mode: EvidenceMode::default(),
-            indexes: Vec::new(),
-        }
-    }
 }
 
 fn ensure_predicate(

@@ -244,7 +244,7 @@ fn compute_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 
         }
     };
 
-    a.min(1.0).max(0.0)
+    a.clamp(0.0, 1.0)
 }
 
 /// Create a deterministic evidence ID from a rule ID and substitution.

@@ -74,23 +74,11 @@ impl Default for RuleApplicabilitySemantics {
 }
 
 /// Full epistemic semantics configuration for an evaluation session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct EpistemicSemantics {
     pub body_truth: BodyTruthSemantics,
     pub body_falsity: BodyFalsitySemantics,
     pub rule_propagation: RulePropagationSemantics,
     pub support_aggregation: SupportAggregationSemantics,
     pub rule_applicability: RuleApplicabilitySemantics,
-}
-
-impl Default for EpistemicSemantics {
-    fn default() -> Self {
-        Self {
-            body_truth: BodyTruthSemantics::default(),
-            body_falsity: BodyFalsitySemantics::default(),
-            rule_propagation: RulePropagationSemantics::default(),
-            support_aggregation: SupportAggregationSemantics::default(),
-            rule_applicability: RuleApplicabilitySemantics::default(),
-        }
-    }
 }
