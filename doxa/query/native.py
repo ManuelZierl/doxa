@@ -20,7 +20,6 @@ from doxa.core.epistemic_semantics import (
     BodyFalsitySemantics,
     BodyTruthSemantics,
     ConstraintApplicabilitySemantics,
-    ConstraintPropagationSemantics,
     EpistemicSemanticsCapabilities,
     NonAtomSemantics,
     RuleApplicabilitySemantics,
@@ -50,6 +49,7 @@ from doxa.core.rule import (
     RuleHeadVarArg,
 )
 from doxa.query.engine import EngineInfo, QueryAnswer, QueryEngine, QueryResult
+from doxa.query.postprocess import finalize_answers
 
 try:
     from doxa import _native as doxa_native
@@ -171,22 +171,13 @@ class NativeQueryEngine(QueryEngine):
             name="native",
             version="0.1",
             supported_epistemic_semantics=EpistemicSemanticsCapabilities(
-                body_truth=(
-                    BodyTruthSemantics.product,
-                    BodyTruthSemantics.minimum,
-                ),
-                body_falsity=(
-                    BodyFalsitySemantics.noisy_or,
-                    BodyFalsitySemantics.maximum,
-                ),
+                body_truth=(BodyTruthSemantics.product,),
+                body_falsity=(BodyFalsitySemantics.noisy_or,),
                 rule_propagation=(RulePropagationSemantics.body_times_rule_weights,),
-                constraint_propagation=(
-                    ConstraintPropagationSemantics.body_times_constraint_weights_to_violation,
-                ),
+                constraint_propagation=(),
                 support_aggregation=(
                     SupportAggregationSemantics.noisy_or,
                     SupportAggregationSemantics.maximum,
-                    SupportAggregationSemantics.capped_sum,
                 ),
                 belnap_status=(BelnapStatusSemantics.nonzero,),
                 non_atom=(NonAtomSemantics.crisp_filters,),
@@ -575,6 +566,14 @@ class NativeQueryEngine(QueryEngine):
         def _var_name(arg):
             return arg.var.name if isinstance(arg, VarArg) else None
 
+        def _numeric(val: Any) -> float | None:
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return float(val)
+            return None
+
+        def _to_number(v: float) -> int | float:
+            return int(round(v)) if abs(v - round(v)) <= 1e-9 else v
+
         # ── eq: equality check or variable binding ────────────────────
         if name == Builtin.eq:
             a, b = _resolve(args[0]), _resolve(args[1])
@@ -589,6 +588,8 @@ class NativeQueryEngine(QueryEngine):
                 new = dict(env)
                 new[av] = b
                 return [(new, 1.0, 0.0)]
+            if av and bv and av == bv:
+                return [(dict(env), 1.0, 0.0)]
             return []
 
         # ── ne: inequality ────────────────────────────────────────────
@@ -630,6 +631,20 @@ class NativeQueryEngine(QueryEngine):
             if len(bound) == 3:
                 a, b, c = vals
                 try:
+                    na = _numeric(a)
+                    nb = _numeric(b)
+                    nc = _numeric(c)
+                    if na is not None and nb is not None and nc is not None:
+                        if name == Builtin.add:
+                            ok = abs((na + nb) - nc) <= 1e-9
+                        elif name == Builtin.sub:
+                            ok = abs((na - nb) - nc) <= 1e-9
+                        elif name == Builtin.mul:
+                            ok = abs((na * nb) - nc) <= 1e-9
+                        else:
+                            ok = abs(nb) > 1e-12 and abs((na / nb) - nc) <= 1e-9
+                        return [(dict(env), 1.0, 0.0)] if ok else []
+
                     if name == Builtin.add:
                         ok = a + b == c
                     elif name == Builtin.sub:
@@ -678,9 +693,8 @@ class NativeQueryEngine(QueryEngine):
 
                     if result is None:
                         return []
-                    # Coerce float results to int when exact
-                    if isinstance(result, float) and result == int(result):
-                        result = int(result)
+                    if isinstance(result, float):
+                        result = _to_number(result)
                     new = dict(env)
                     new[uv] = result
                     return [(new, 1.0, 0.0)]
@@ -690,7 +704,9 @@ class NativeQueryEngine(QueryEngine):
 
         # ── between ──────────────────────────────────────────────────
         if name == Builtin.between:
-            x, lo, hi = _resolve(args[0]), _resolve(args[1]), _resolve(args[2])
+            x = _numeric(_resolve(args[0]))
+            lo = _numeric(_resolve(args[1]))
+            hi = _numeric(_resolve(args[2]))
             if x is None or lo is None or hi is None:
                 return []
             try:
@@ -708,11 +724,7 @@ class NativeQueryEngine(QueryEngine):
             )
         if name == Builtin.float:
             v = _resolve(args[0])
-            return (
-                [(dict(env), 1.0, 0.0)]
-                if isinstance(v, (int, float)) and not isinstance(v, bool)
-                else []
-            )
+            return [(dict(env), 1.0, 0.0)] if isinstance(v, float) else []
         if name == Builtin.string:
             v = _resolve(args[0])
             return [(dict(env), 1.0, 0.0)] if isinstance(v, str) else []
@@ -735,7 +747,7 @@ class NativeQueryEngine(QueryEngine):
         if name == Builtin.predicate_ref:
             # predicate_ref args look like "name/arity"
             v = _resolve(args[0])
-            return [(dict(env), 1.0, 0.0)] if isinstance(v, str) and "/" in v else []
+            return [(dict(env), 1.0, 0.0)] if isinstance(v, str) else []
 
         return []
 
@@ -766,11 +778,29 @@ class NativeQueryEngine(QueryEngine):
         effective_valid_at = query.options.valid_at or effective_query_time
         effective_known_at = query.options.known_at or effective_query_time
 
+        if branch.constraints:
+            raise NotImplementedError(
+                "NativeQueryEngine does not support constraints yet; "
+                "use the memory or postgres query engine for constrained branches."
+            )
+
+        visible_records = []
+        for record in branch.belief_records:
+            if record.et > effective_known_at:
+                continue
+            if record.vf is not None and record.vf > effective_valid_at:
+                continue
+            if record.vt is not None and record.vt < effective_valid_at:
+                continue
+            visible_records.append(record)
+
+        branch_for_eval = branch.model_copy(update={"belief_records": visible_records})
+
         # Create an in-memory store for this evaluation (no filesystem I/O)
         store = doxa_native.NativeStore.new_temporary()
 
         # Load branch data
-        self._load_branch(store, branch)
+        self._load_branch(store, branch_for_eval)
 
         # ── Hypotheticals: process AssumeGoals before materialization ─
         remaining_goals = []
@@ -840,9 +870,6 @@ class NativeQueryEngine(QueryEngine):
         for env, b, d in envs:
             status = _belnap_from_bd(b, d)
 
-            if not _focus_matches(query.options.focus.value, b, d, status):
-                continue
-
             # Filter anonymous vars from bindings, sort alphabetically
             filtered = dict(
                 sorted((k, v) for k, v in env.items() if k not in query.anon_vars)
@@ -863,16 +890,12 @@ class NativeQueryEngine(QueryEngine):
                 )
             )
 
-        # ── Ordering ──────────────────────────────────────────────────
-        if query.options.order_by:
-            sort_keys = query.options.order_by
-            answers.sort(key=lambda a: tuple(a.bindings.get(k, "") for k in sort_keys))
-
-        # ── Limit / offset ───────────────────────────────────────────
-        if query.options.offset:
-            answers = answers[query.options.offset :]
-        if query.options.limit is not None:
-            answers = answers[: query.options.limit]
+        answers = finalize_answers(
+            answers,
+            query,
+            is_closed_query=False,
+            closed_query_fallback=None,
+        )
 
         return QueryResult(
             answers=tuple(answers),
@@ -881,21 +904,3 @@ class NativeQueryEngine(QueryEngine):
             effective_known_at=effective_known_at,
             epistemic_semantics=query.options.epistemic_semantics,
         )
-
-
-# ── Focus filter ──────────────────────────────────────────────────────
-
-
-def _focus_matches(focus: str, b: float, d: float, status: BelnapStatus) -> bool:
-    """Return True if the answer matches the query focus filter."""
-    if focus == "all":
-        return True
-    if focus == "support":
-        return b > 1e-12
-    if focus == "disbelief":
-        return d > 1e-12
-    if focus == "contradiction":
-        return status == BelnapStatus.both
-    if focus == "ignorance":
-        return status == BelnapStatus.neither
-    return True

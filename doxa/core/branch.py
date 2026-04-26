@@ -1,22 +1,26 @@
+import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field
 
 from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.belief_record import BeliefRecord
+from doxa.core.belief_record import BeliefEntityArg, BeliefRecord
 from doxa.core.constraint import Constraint
 from doxa.core.entity import Entity
+from doxa.core.goal import AtomGoal, EntityArg
 from doxa.core.predicate import Predicate
-from doxa.core.rule import Rule
+from doxa.core.rule import Rule, RuleAtomGoal, RuleGoalEntityArg, RuleHeadEntityArg
 from doxa.core.schema_utils import compact_schema_for_llm
-from doxa.core.template import TemplateContext, parse_template_call, parse_use_templates
-from doxa.core.template_registry import TemplateRegistry
-
-if TYPE_CHECKING:
-    from doxa.core.templates.pred_template import DoxaStatement
+from doxa.core.template import (
+    DoxaStatement,
+    TemplateContext,
+    parse_template_call,
+    parse_use_templates,
+)
+from doxa.core.template_registry import TemplateRegistry, resolve_template_import
 
 
 def _split_ax_statements(inp: str) -> list[str]:
@@ -166,6 +170,110 @@ def _contains_top_level_rule_operator(inp: str) -> bool:
     return False
 
 
+def _strip_comment_lines(inp: str) -> str:
+    lines = inp.split("\n")
+    filtered_lines = [line for line in lines if not line.strip().startswith("%")]
+    return "\n".join(filtered_lines).strip()
+
+
+class _BranchBuilder:
+    """Collector/builder for `Branch.from_doxa` parsing flow."""
+
+    def __init__(self, branch_cls: type["Branch"], registry: TemplateRegistry) -> None:
+        self._branch_cls = branch_cls
+        self._registry = registry
+        self._ctx = TemplateContext()
+
+        self.predicates: list[Predicate] = []
+        self.entities: list[Entity] = []
+        self.belief_records: list[BeliefRecord] = []
+        self.rules: list[Rule] = []
+        self.constraints: list[Constraint] = []
+
+        self.pred_map: Dict[tuple[str, int], Predicate] = {}
+        self.explicit_pred_decls: set[tuple[str, int]] = set()
+        self.ent_map: Dict[str, Entity] = {}
+
+    def process_statement(self, stmt: str) -> None:
+        stripped = stmt.strip()
+
+        if stripped.startswith("use templates "):
+            self._import_templates(stripped)
+            return
+
+        first_token = stripped.split()[0] if stripped else ""
+        if self._registry.has(first_token) and not stripped.startswith("!:-"):
+            self._expand_template(stripped)
+            return
+
+        if stripped.startswith("!:-"):
+            self._add_constraint(Constraint.from_doxa(stripped))
+        elif _contains_top_level_rule_operator(stripped):
+            self._add_rule(Rule.from_doxa(stripped))
+        else:
+            self._add_belief_record(BeliefRecord.from_doxa(stripped))
+
+    def build(self) -> "Branch":
+        self.predicates.extend(
+            p for p in self.pred_map.values() if p not in self.predicates
+        )
+        self.entities = list(self.ent_map.values())
+        return self._branch_cls(
+            kind=BaseKind.branch,
+            created_at=datetime.now(timezone.utc),
+            name="main",
+            ephemeral=False,
+            predicates=self.predicates,
+            entities=self.entities,
+            belief_records=self.belief_records,
+            rules=self.rules,
+            constraints=self.constraints,
+        )
+
+    def _import_templates(self, stmt: str) -> None:
+        imp = parse_use_templates(stmt)
+        loaded = resolve_template_import(imp)
+        for name, tmpl in loaded.items():
+            self._registry.register(name, tmpl)
+
+    def _expand_template(self, stmt: str) -> None:
+        call = parse_template_call(stmt)
+        expanded = self._registry.expand(call, self._ctx)
+        self._branch_cls._integrate_statements(
+            expanded,
+            self.predicates,
+            self.entities,
+            self.belief_records,
+            self.rules,
+            self.constraints,
+            self.pred_map,
+            self.explicit_pred_decls,
+            self.ent_map,
+        )
+
+    def _add_constraint(self, constraint: Constraint) -> None:
+        self.constraints.append(constraint)
+        self._branch_cls._collect_entities_from_constraint(constraint, self.ent_map)
+        self._branch_cls._collect_predicates_from_constraint(constraint, self.pred_map)
+
+    def _add_rule(self, rule: Rule) -> None:
+        self.rules.append(rule)
+        self._branch_cls._collect_entities_from_rule(rule, self.ent_map)
+        self._branch_cls._collect_predicates_from_rule(rule, self.pred_map)
+
+    def _add_belief_record(self, record: BeliefRecord) -> None:
+        self.belief_records.append(record)
+        self._branch_cls._collect_entities_from_belief_record(record, self.ent_map)
+        key = (record.pred_name, record.pred_arity)
+        if key not in self.pred_map:
+            self.pred_map[key] = Predicate(
+                kind=BaseKind.predicate,
+                name=record.pred_name,
+                arity=record.pred_arity,
+                type_list=["entity"] * record.pred_arity,
+            )
+
+
 class Branch(Base, AuditMixin):
     kind: Literal[BaseKind.branch] = Field(...)
     name: str = Field(
@@ -227,10 +335,7 @@ class Branch(Base, AuditMixin):
         if not isinstance(inp, str):
             raise TypeError("Branch input must be a string.")
 
-        # Filter out comment lines starting with %
-        lines = inp.split("\n")
-        filtered_lines = [line for line in lines if not line.strip().startswith("%")]
-        s = "\n".join(filtered_lines).strip()
+        s = _strip_comment_lines(inp)
 
         if not s:
             raise ValueError("Branch input must not be empty.")
@@ -241,83 +346,10 @@ class Branch(Base, AuditMixin):
         if registry is None:
             registry = TemplateRegistry()
 
-        predicates: list[Predicate] = []
-        entities: list[Entity] = []
-        belief_records: list[BeliefRecord] = []
-        rules: list[Rule] = []
-        constraints: list[Constraint] = []
-
-        pred_map: Dict[tuple[str, int], Predicate] = {}
-        explicit_pred_decls: set[tuple[str, int]] = set()
-        ent_map: Dict[str, Entity] = {}
-
-        ctx = TemplateContext()
-
+        builder = _BranchBuilder(cls, registry)
         for stmt in statements:
-            stripped = stmt.strip()
-
-            # ── use templates import ─────────────────────────────────
-            if stripped.startswith("use templates "):
-                imp = parse_use_templates(stripped)
-                registry.import_templates(imp)
-                continue
-
-            # ── template invocation ──────────────────────────────────
-            first_token = stripped.split()[0] if stripped else ""
-            if registry.has(first_token) and not stripped.startswith("!:-"):
-                call = parse_template_call(stripped)
-                expanded = registry.expand(call, ctx)
-                cls._integrate_statements(
-                    expanded,
-                    predicates,
-                    entities,
-                    belief_records,
-                    rules,
-                    constraints,
-                    pred_map,
-                    explicit_pred_decls,
-                    ent_map,
-                )
-                continue
-
-            # ── normal statements ────────────────────────────────────
-            if stripped.startswith("!:-"):
-                constraint = Constraint.from_doxa(stripped)
-                constraints.append(constraint)
-                cls._collect_entities_from_constraint(constraint, ent_map)
-                cls._collect_predicates_from_constraint(constraint, pred_map)
-            elif _contains_top_level_rule_operator(stripped):
-                rule = Rule.from_doxa(stripped)
-                rules.append(rule)
-                cls._collect_entities_from_rule(rule, ent_map)
-                cls._collect_predicates_from_rule(rule, pred_map)
-            else:
-                record = BeliefRecord.from_doxa(stripped)
-                belief_records.append(record)
-                cls._collect_entities_from_belief_record(record, ent_map)
-                key = (record.pred_name, record.pred_arity)
-                if key not in pred_map:
-                    pred_map[key] = Predicate(
-                        kind=BaseKind.predicate,
-                        name=record.pred_name,
-                        arity=record.pred_arity,
-                        type_list=["entity"] * record.pred_arity,
-                    )
-
-        predicates.extend(p for p in pred_map.values() if p not in predicates)
-        entities = list(ent_map.values())
-
-        return cls(
-            kind=BaseKind.branch,
-            created_at=datetime.now(timezone.utc),
-            name="main",
-            ephemeral=False,
-            predicates=predicates,
-            entities=entities,
-            belief_records=belief_records,
-            rules=rules,
-            constraints=constraints,
-        )
+            builder.process_statement(stmt)
+        return builder.build()
 
     @classmethod
     def _integrate_statements(
@@ -386,24 +418,28 @@ class Branch(Base, AuditMixin):
         cls, record: BeliefRecord, ent_map: Dict[str, Entity]
     ) -> None:
         for arg in record.args:
-            if hasattr(arg, "ent_name"):
+            if isinstance(arg, cls._entity_arg_types()):
                 name = arg.ent_name
                 if name not in ent_map:
                     ent_map[name] = Entity(kind=BaseKind.entity, name=name)
+
+    @staticmethod
+    def _entity_arg_types() -> tuple[type, ...]:
+        return (BeliefEntityArg, RuleHeadEntityArg, RuleGoalEntityArg, EntityArg)
 
     @classmethod
     def _collect_entities_from_rule(
         cls, rule: Rule, ent_map: Dict[str, Entity]
     ) -> None:
         for arg in rule.head_args:
-            if hasattr(arg, "ent_name"):
+            if isinstance(arg, RuleHeadEntityArg):
                 name = arg.ent_name
                 if name not in ent_map:
                     ent_map[name] = Entity(kind=BaseKind.entity, name=name)
         for goal in rule.goals:
-            if hasattr(goal, "goal_args"):
+            if isinstance(goal, RuleAtomGoal):
                 for arg in goal.goal_args:
-                    if hasattr(arg, "ent_name"):
+                    if isinstance(arg, RuleGoalEntityArg):
                         name = arg.ent_name
                         if name not in ent_map:
                             ent_map[name] = Entity(kind=BaseKind.entity, name=name)
@@ -413,9 +449,9 @@ class Branch(Base, AuditMixin):
         cls, constraint: Constraint, ent_map: Dict[str, Entity]
     ) -> None:
         for goal in constraint.goals:
-            if hasattr(goal, "goal_args"):
+            if isinstance(goal, AtomGoal):
                 for arg in goal.goal_args:
-                    if hasattr(arg, "ent_name"):
+                    if isinstance(arg, EntityArg):
                         name = arg.ent_name
                         if name not in ent_map:
                             ent_map[name] = Entity(kind=BaseKind.entity, name=name)
@@ -433,7 +469,7 @@ class Branch(Base, AuditMixin):
                 type_list=["entity"] * rule.head_pred_arity,
             )
         for goal in rule.goals:
-            if hasattr(goal, "pred_name") and hasattr(goal, "pred_arity"):
+            if isinstance(goal, RuleAtomGoal):
                 key = (goal.pred_name, goal.pred_arity)
                 if key not in pred_map:
                     pred_map[key] = Predicate(
@@ -448,7 +484,7 @@ class Branch(Base, AuditMixin):
         cls, constraint: Constraint, pred_map: Dict[tuple[str, int], Predicate]
     ) -> None:
         for goal in constraint.goals:
-            if hasattr(goal, "pred_name") and hasattr(goal, "pred_arity"):
+            if isinstance(goal, AtomGoal):
                 key = (goal.pred_name, goal.pred_arity)
                 if key not in pred_map:
                     pred_map[key] = Predicate(
@@ -500,19 +536,23 @@ class Branch(Base, AuditMixin):
             if e.name not in ent_map:
                 ent_map[e.name] = e
 
-        existing_br = {r.to_doxa() for r in self.belief_records}
+        def _stable_key(obj: Any) -> str:
+            payload = obj.model_dump(mode="json", exclude={"created_at", "updated_at"})
+            return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+        existing_br = {_stable_key(r) for r in self.belief_records}
         merged_brs = list(self.belief_records) + [
-            r for r in other.belief_records if r.to_doxa() not in existing_br
+            r for r in other.belief_records if _stable_key(r) not in existing_br
         ]
 
-        existing_rules = {r.to_doxa() for r in self.rules}
+        existing_rules = {_stable_key(r) for r in self.rules}
         merged_rules = list(self.rules) + [
-            r for r in other.rules if r.to_doxa() not in existing_rules
+            r for r in other.rules if _stable_key(r) not in existing_rules
         ]
 
-        existing_constraints = {c.to_doxa() for c in self.constraints}
+        existing_constraints = {_stable_key(c) for c in self.constraints}
         merged_constraints = list(self.constraints) + [
-            c for c in other.constraints if c.to_doxa() not in existing_constraints
+            c for c in other.constraints if _stable_key(c) not in existing_constraints
         ]
 
         return self.model_copy(

@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
+from doxa.cli.io import BranchLoadError, load_branch_file
+from doxa.cli.json_repair import repair_branch_json
+from doxa.cli.serialization import branch_to_doxa
 
 if TYPE_CHECKING:
     from doxa.cli.terminal import TerminalState
@@ -16,6 +19,26 @@ if TYPE_CHECKING:
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ParsedOutArgs:
+    out_file: Path | None
+    remaining: list[str]
+
+
+def _extract_out_file_flag(args: list[str]) -> ParsedOutArgs:
+    out_file: Path | None = None
+    clean: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--file" and i + 1 < len(args):
+            out_file = Path(args[i + 1])
+            i += 2
+        else:
+            clean.append(args[i])
+            i += 1
+    return ParsedOutArgs(out_file=out_file, remaining=clean)
 
 
 def _branch_to_doxa(
@@ -26,21 +49,13 @@ def _branch_to_doxa(
     rules=True,
     constraints=True,
 ) -> str:
-    b = state.branch
-    lines: list[str] = []
-    if predicates:
-        for p in b.predicates:
-            lines.append(f"{p.to_doxa()}.")
-    if belief_records:
-        for r in b.belief_records:
-            lines.append(f"{r.to_doxa()}.")
-    if rules:
-        for r in b.rules:
-            lines.append(f"{r.to_doxa()}.")
-    if constraints:
-        for c in b.constraints:
-            lines.append(f"{c.to_doxa()}.")
-    return "\n".join(lines)
+    return branch_to_doxa(
+        state.branch,
+        predicates=predicates,
+        belief_records=belief_records,
+        rules=rules,
+        constraints=constraints,
+    )
 
 
 def _branch_to_dict(
@@ -98,28 +113,17 @@ def _parse_dump_args(args: list[str]) -> tuple[str, dict[str, bool]]:
 
 def cmd_dump(state: "TerminalState", args: list[str]) -> None:
     """/- dump [--ax|--json] [--no-predicates] [--no-belief-records] [--no-rules] [--no-constraints]"""
-    # Check for optional output file: /- dump --file out.doxa
-    out_file: Path | None = None
-    clean: list[str] = []
-    i = 0
-    while i < len(args):
-        if args[i] == "--file" and i + 1 < len(args):
-            out_file = Path(args[i + 1])
-            i += 2
-        else:
-            clean.append(args[i])
-            i += 1
-
-    fmt, flags = _parse_dump_args(clean)
+    parsed = _extract_out_file_flag(args)
+    fmt, flags = _parse_dump_args(parsed.remaining)
 
     if fmt == "json":
         content = json.dumps(_branch_to_dict(state, **flags), indent=2)
     else:
         content = _branch_to_doxa(state, **flags)
 
-    if out_file:
-        out_file.write_text(content)
-        print(f"  Dumped to {out_file}")
+    if parsed.out_file:
+        parsed.out_file.write_text(content)
+        print(f"  Dumped to {parsed.out_file}")
     else:
         print(content)
 
@@ -144,16 +148,8 @@ def cmd_schema(state: "TerminalState", args: list[str]) -> None:
     from doxa.core.branch import Branch
     from doxa.core.query import Query
 
-    out_file: Path | None = None
-    clean: list[str] = []
-    i = 0
-    while i < len(args):
-        if args[i] == "--file" and i + 1 < len(args):
-            out_file = Path(args[i + 1])
-            i += 2
-        else:
-            clean.append(args[i])
-            i += 1
+    parsed = _extract_out_file_flag(args)
+    clean = parsed.remaining
 
     if not clean:
         # default: full combined schema
@@ -186,9 +182,9 @@ def cmd_schema(state: "TerminalState", args: list[str]) -> None:
 
     content = json.dumps(result, indent=2, default=str)
 
-    if out_file:
-        out_file.write_text(content)
-        print(f"  Schema written to {out_file}")
+    if parsed.out_file:
+        parsed.out_file.write_text(content)
+        print(f"  Schema written to {parsed.out_file}")
     else:
         print(content)
 
@@ -211,13 +207,15 @@ def cmd_load(state: "TerminalState", args: list[str]) -> None:
         try:
             branch = _load_file(path, fix_missing_kinds=fix_mode)
             state.branch = state.branch.merge(branch)
+            if not state.ephemeral:
+                state.repo.save(state.branch)
             print(
                 f"  Loaded {path}  "
                 f"(+{len(branch.belief_records)} facts, "
                 f"+{len(branch.rules)} rules, "
                 f"+{len(branch.constraints)} constraints)"
             )
-        except Exception as exc:
+        except BranchLoadError as exc:
             print(f"  Error loading {path}: {exc}")
 
 
@@ -287,13 +285,28 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
             for r in b.belief_records
             if r.pred_name != pred_name or r.pred_arity != arity
         ]
-        new_rules = [r for r in b.rules if r.head_pred_name != pred_name]
-        new_constraints = list(
-            b.constraints
-        )  # constraints don't have a single pred name
+
+        def _goal_refs_pred(goal) -> bool:
+            return (
+                getattr(goal, "pred_name", None) == pred_name
+                and getattr(goal, "pred_arity", None) == arity
+            )
+
+        new_rules = [
+            r
+            for r in b.rules
+            if not (
+                (r.head_pred_name == pred_name and r.head_pred_arity == arity)
+                or any(_goal_refs_pred(g) for g in r.goals)
+            )
+        ]
+        new_constraints = [
+            c for c in b.constraints if not any(_goal_refs_pred(g) for g in c.goals)
+        ]
         removed = len(b.predicates) - len(new_predicates)
         removed_brs = len(b.belief_records) - len(new_brs)
         removed_rules = len(b.rules) - len(new_rules)
+        removed_constraints = len(b.constraints) - len(new_constraints)
         state.branch = b.model_copy(
             update={
                 "predicates": new_predicates,
@@ -304,7 +317,8 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
         )
         print(
             f"  Unloaded predicate {pred_name}/{arity}: "
-            f"{removed} declaration(s), {removed_brs} fact(s), {removed_rules} rule(s) removed."
+            f"{removed} declaration(s), {removed_brs} fact(s), "
+            f"{removed_rules} rule(s), {removed_constraints} constraint(s) removed."
         )
 
     elif subcmd == "entity" and len(args) >= 2:
@@ -331,6 +345,13 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
         print(
             "  Usage: /- unload predicate <name>/<arity> | entity <name> | rules | constraints | all"
         )
+        return
+
+    if not state.ephemeral:
+        try:
+            state.repo.save(state.branch)
+        except Exception as exc:
+            print(f"  Warning: could not persist branch: {exc}")
 
 
 def cmd_search(state: "TerminalState", args: list[str]) -> None:
@@ -376,184 +397,25 @@ def cmd_search(state: "TerminalState", args: list[str]) -> None:
         print(f"  No matches for {pattern!r}.")
 
 
-def _auto_fix_kinds(data: dict, error: ValidationError) -> dict:
-    """Auto-fix missing 'kind' fields and required Branch fields in JSON data."""
-    import copy
-    from datetime import datetime, timezone
-
-    from doxa.core.base_kinds import BaseKind
-
-    data = copy.deepcopy(data)
-
-    # Map of field names to their expected kinds
-    kind_map = {
-        "predicates": BaseKind.predicate,
-        "belief_records": BaseKind.belief_record,
-        "rules": BaseKind.rule,
-        "constraints": BaseKind.constraint,
-        "entities": BaseKind.entity,
-    }
-
-    # Add missing required Branch fields with defaults
-    if "name" not in data:
-        data["name"] = "imported"
-    if "ephemeral" not in data:
-        data["ephemeral"] = False
-    if "created_at" not in data:
-        data["created_at"] = datetime.now(timezone.utc).isoformat()
-
-    # Ensure all required array fields exist
-    for field_name in kind_map.keys():
-        if field_name not in data:
-            data[field_name] = []
-
-    # Fix missing kinds in top-level arrays
-    for field_name, kind in kind_map.items():
-        if field_name in data and isinstance(data[field_name], list):
-            for item in data[field_name]:
-                if isinstance(item, dict) and "kind" not in item:
-                    item["kind"] = kind
-
-    # Fix branch kind if missing
-    if "kind" not in data:
-        data["kind"] = BaseKind.branch
-
-    # Recursively fix nested structures
-    _fix_nested_kinds(data)
-
-    return data
+def _auto_fix_kinds(data: dict, _error: object | None = None) -> dict:
+    """Backward-compatible wrapper around :func:`repair_branch_json`."""
+    return repair_branch_json(data)
 
 
 def _fix_nested_kinds(obj, parent_context=None):
-    """Recursively fix missing 'kind' fields and other required fields in nested structures.
-
-    Args:
-        obj: The object to fix (dict or list)
-        parent_context: Context about the parent ('rule' or 'constraint' or None)
-    """
-    from doxa.core.base_kinds import BaseKind
-
-    if isinstance(obj, dict):
-        # Determine context from current object
-        current_context = parent_context
-        if "head_pred_name" in obj:
-            current_context = "rule"
-        elif "kind" in obj and obj["kind"] == BaseKind.constraint:
-            current_context = "constraint"
-
-        # Fix belief_record args (discriminated union with term_kind)
-        if "args" in obj and isinstance(obj["args"], list) and "pred_name" in obj:
-            # This is a belief_record - args don't have pos field
-            for arg in obj["args"]:
-                if isinstance(arg, dict) and "kind" not in arg:
-                    arg["kind"] = BaseKind.belief_arg
-
-        # Fix rule head_args
-        if "head_args" in obj and isinstance(obj["head_args"], list):
-            for i, arg in enumerate(obj["head_args"]):
-                if isinstance(arg, dict):
-                    if "kind" not in arg:
-                        arg["kind"] = BaseKind.rule_head_arg
-                    # Add missing pos field
-                    if "pos" not in arg:
-                        arg["pos"] = i
-                    # Recursively fix nested structures in head args
-                    _fix_nested_kinds(arg, current_context)
-
-        # Fix rule goals and constraint goals
-        if "goals" in obj and isinstance(obj["goals"], list):
-            for i, goal in enumerate(obj["goals"]):
-                if isinstance(goal, dict):
-                    # Use correct kind based on context
-                    if "kind" not in goal:
-                        if current_context == "rule":
-                            goal["kind"] = BaseKind.rule_goal
-                        else:
-                            goal["kind"] = BaseKind.goal
-                    # Add missing idx field
-                    if "idx" not in goal:
-                        goal["idx"] = i
-
-                    # Fix goal args
-                    if "goal_args" in goal and isinstance(goal["goal_args"], list):
-                        for j, arg in enumerate(goal["goal_args"]):
-                            if isinstance(arg, dict):
-                                # Use correct kind based on context
-                                if "kind" not in arg:
-                                    if current_context == "rule":
-                                        arg["kind"] = BaseKind.rule_goal_arg
-                                    else:
-                                        arg["kind"] = BaseKind.goal_arg
-                                # Add missing pos field
-                                if "pos" not in arg:
-                                    arg["pos"] = j
-                                # Recursively fix nested structures in goal args
-                                _fix_nested_kinds(arg, current_context)
-                    # Recursively fix other nested structures in goals
-                    _fix_nested_kinds(goal, current_context)
-
-        # Fix vars in any nested structure (e.g., in goal args)
-        if "var" in obj and isinstance(obj["var"], dict) and "kind" not in obj["var"]:
-            obj["var"]["kind"] = BaseKind.var
-
-        # Recursively process all nested dicts and lists
-        for value in obj.values():
-            if isinstance(value, (dict, list)):
-                _fix_nested_kinds(value, current_context)
-
-    elif isinstance(obj, list):
-        for item in obj:
-            if isinstance(item, (dict, list)):
-                _fix_nested_kinds(item, parent_context)
+    """Deprecated compatibility shim; nested fixing lives in json_repair."""
+    _ = parent_context
+    repaired = repair_branch_json(obj) if isinstance(obj, dict) else None
+    if repaired is not None and isinstance(obj, dict):
+        obj.clear()
+        obj.update(repaired)
 
 
 # ── file loading helper (also used by load command) ──────────────────────────
 
 
 def _load_file(path: Path, fix_missing_kinds: bool = False) -> "Branch":
-    import json as json_module
-
-    from pydantic import ValidationError
-
-    from doxa.core.branch import Branch
-
-    suffix = path.suffix.lower()
-
-    # Try UTF-8 first, then fallback to other encodings (including UTF-16 for Windows files)
-    text = None
-    for encoding in [
-        "utf-8",
-        "utf-8-sig",
-        "utf-16",
-        "utf-16-le",
-        "utf-16-be",
-        "latin-1",
-        "cp1252",
-    ]:
-        try:
-            text = path.read_text(encoding=encoding)
-            break
-        except (UnicodeDecodeError, LookupError):
-            continue
-
-    if text is None:
-        raise ValueError("Could not decode file with any supported encoding")
-
-    if suffix == ".json":
-        if fix_missing_kinds:
-            # Try to auto-fix missing kinds
-            try:
-                return Branch.model_validate_json(text)
-            except ValidationError as e:
-                # Parse JSON and try to fix missing kinds
-                data = json_module.loads(text)
-                data = _auto_fix_kinds(data, e)
-                return Branch.model_validate(data)
-        else:
-            return Branch.model_validate_json(text)
-    else:
-        # Treat as .doxa
-        return Branch.from_doxa(text)
+    return load_branch_file(path, fix_missing_kinds=fix_missing_kinds)
 
 
 # ── dispatch table ────────────────────────────────────────────────────────────

@@ -28,59 +28,101 @@ from doxa.cli.merge import merge_command
 from doxa.cli.prompt import extract_prompt_command, query_prompt_command
 
 
-def _make_repo(memory_kind: str):
-    if memory_kind == "memory":
-        from doxa.persistence.memory import InMemoryBranchRepository
+def _make_memory_repo():
+    from doxa.persistence.memory import InMemoryBranchRepository
 
-        return InMemoryBranchRepository()
-    elif memory_kind == "native":
-        import os
-        import tempfile
+    return InMemoryBranchRepository()
 
-        from doxa.persistence.native import NativeBranchRepository
 
-        native_dir = os.environ.get("DOXA_NATIVE_DIR")
-        if native_dir:
-            base = Path(native_dir)
-            edb_path = base / "edb"
-            idb_path = base / "idb"
-            edb_path.mkdir(parents=True, exist_ok=True)
-            idb_path.mkdir(parents=True, exist_ok=True)
-        else:
-            edb_path = Path(tempfile.mkdtemp(prefix="doxa_edb_"))
-            idb_path = Path(tempfile.mkdtemp(prefix="doxa_idb_"))
-        return NativeBranchRepository(str(edb_path), str(idb_path))
-    elif memory_kind == "postgres":
-        import os
+def _make_native_repo():
+    import os
+    import tempfile
 
-        from doxa.persistence.postgres import PostgresBranchRepository
+    from doxa.persistence.native import NativeBranchRepository
 
-        db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
-        return PostgresBranchRepository(db_url)
+    native_dir = os.environ.get("DOXA_NATIVE_DIR")
+    if native_dir:
+        base = Path(native_dir)
+        edb_path = base / "edb"
+        idb_path = base / "idb"
+        edb_path.mkdir(parents=True, exist_ok=True)
+        idb_path.mkdir(parents=True, exist_ok=True)
     else:
-        raise click.ClickException(f"Unknown memory backend: {memory_kind!r}")
+        edb_path = Path(tempfile.mkdtemp(prefix="doxa_edb_"))
+        idb_path = Path(tempfile.mkdtemp(prefix="doxa_idb_"))
+    return NativeBranchRepository(str(edb_path), str(idb_path))
+
+
+def _make_postgres_repo():
+    import os
+
+    from doxa.persistence.postgres import PostgresBranchRepository
+
+    db_url = os.environ.get("DOXA_POSTGRES_URL", "postgresql://localhost/doxa")
+    return PostgresBranchRepository(db_url)
+
+
+def _make_memory_engine(_repo=None):
+    from doxa.query.memory import InMemoryQueryEngine
+
+    return InMemoryQueryEngine()
+
+
+def _make_native_engine(_repo=None):
+    from doxa.query.native import NativeQueryEngine
+
+    return NativeQueryEngine()
+
+
+def _make_postgres_engine(repo):
+    from doxa.query.postgres import PostgresQueryEngine
+
+    if repo is None:
+        raise click.ClickException(
+            "PostgresQueryEngine requires a PostgresBranchRepository. "
+            "Use --memory postgres to create one automatically."
+        )
+    return PostgresQueryEngine(repo)
+
+
+BACKEND_REGISTRY = {
+    "memory": {
+        "repo_factory": _make_memory_repo,
+        "engine_factory": _make_memory_engine,
+        "default_engine": "memory",
+    },
+    "native": {
+        "repo_factory": _make_native_repo,
+        "engine_factory": _make_native_engine,
+        "default_engine": "native",
+    },
+    "postgres": {
+        "repo_factory": _make_postgres_repo,
+        "engine_factory": _make_postgres_engine,
+        "default_engine": "postgres",
+    },
+}
+
+
+ENGINE_REGISTRY = {
+    "memory": _make_memory_engine,
+    "native": _make_native_engine,
+    "postgres": _make_postgres_engine,
+}
+
+
+def _make_repo(memory_kind: str):
+    try:
+        return BACKEND_REGISTRY[memory_kind]["repo_factory"]()
+    except KeyError as exc:
+        raise click.ClickException(f"Unknown memory backend: {memory_kind!r}") from exc
 
 
 def _make_engine(engine_kind: str, repo=None):
-    if engine_kind == "memory":
-        from doxa.query.memory import InMemoryQueryEngine
-
-        return InMemoryQueryEngine()
-    elif engine_kind == "native":
-        from doxa.query.native import NativeQueryEngine
-
-        return NativeQueryEngine()
-    elif engine_kind == "postgres":
-        from doxa.query.postgres import PostgresQueryEngine
-
-        if repo is None:
-            raise click.ClickException(
-                "PostgresQueryEngine requires a PostgresBranchRepository. "
-                "Use --memory postgres to create one automatically."
-            )
-        return PostgresQueryEngine(repo)
-    else:
-        raise click.ClickException(f"Unknown query engine: {engine_kind!r}")
+    try:
+        return ENGINE_REGISTRY[engine_kind](repo)
+    except KeyError as exc:
+        raise click.ClickException(f"Unknown query engine: {engine_kind!r}") from exc
 
 
 @click.group(

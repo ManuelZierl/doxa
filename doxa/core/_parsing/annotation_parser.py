@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from doxa.core._parsing.parsing_utils import (
+    parse_python_string_literal,
+    split_top_level,
+)
+
 
 def parse_ax_annotation(inp: str) -> dict[str, object]:
     if not isinstance(inp, str):
@@ -23,45 +28,7 @@ def parse_ax_annotation(inp: str) -> dict[str, object]:
     if not s:
         return {}
 
-    parts: list[str] = []
-    buf: list[str] = []
-    in_quotes = False
-    escape = False
-
-    for ch in s:
-        if escape:
-            buf.append(ch)
-            escape = False
-            continue
-
-        if ch == "\\" and in_quotes:
-            buf.append(ch)
-            escape = True
-            continue
-
-        if ch == '"':
-            buf.append(ch)
-            in_quotes = not in_quotes
-            continue
-
-        if ch == "," and not in_quotes:
-            part = "".join(buf).strip()
-            if not part:
-                raise ValueError("Invalid annotation: empty entry between commas.")
-            parts.append(part)
-            buf = []
-            continue
-
-        buf.append(ch)
-
-    if in_quotes:
-        raise ValueError("Invalid annotation: unterminated quoted string.")
-
-    tail = "".join(buf).strip()
-    if tail:
-        parts.append(tail)
-    elif s.endswith(","):
-        raise ValueError("Invalid annotation: trailing comma.")
+    parts = split_top_level(s, sep=",")
 
     raw: dict[str, object] = {}
 
@@ -116,11 +83,12 @@ def _parse_annotation_item(key: str, value: str) -> tuple[str, object]:
 
     if key in {"b", "d"}:
         try:
-            return key, float(value)
+            parsed = float(value)
         except ValueError as exc:
             raise ValueError(
                 f"Annotation key {key!r} must be a number in [0,1], got {value!r}."
             ) from exc
+        return key, parsed
 
     if key in {"et", "vf", "vt"}:
         raw = _parse_str_value(value)
@@ -142,7 +110,6 @@ def _parse_str_value(value: str) -> str:
     value = value.strip()
 
     if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-        inner = value[1:-1]
-        return bytes(inner, "utf-8").decode("unicode_escape")
+        return parse_python_string_literal(value)
 
     return value

@@ -24,11 +24,11 @@ computed with monotone witness/atom updates.
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from uuid import uuid4
 
 from psycopg.types.json import Jsonb
 
@@ -43,14 +43,11 @@ from doxa.core.epistemic_semantics import (
 from doxa.core.goal import AtomGoal, Goal
 from doxa.core.query import Query
 from doxa.core.rule import Rule, RuleAtomGoal
+from doxa.query._answers import _query_var_names
+from doxa.query._epistemic import _derive_belnap_status
 from doxa.query.engine import QueryAnswer, QueryResult
-from doxa.query.evaluator import (
-    _apply_focus,
-    _derive_belnap_status,
-    _query_var_names,
-    _resolve_effective_times,
-    _sort_answers,
-)
+from doxa.query.evaluator import _resolve_effective_times
+from doxa.query.postprocess import finalize_answers
 
 Signature = Tuple[str, int]
 
@@ -93,6 +90,12 @@ def try_evaluate_native(conn, branch: Branch, query: Query) -> Optional[QueryRes
     return native.evaluate(conn)
 
 
+def probe_native_support(branch: Branch, query: Query) -> tuple[bool, Optional[str]]:
+    """Return native SQL support status and unsupported reason (if any)."""
+    native = _NativeSqlEvaluator(branch, query)
+    return native.supported, native.unsupported_reason
+
+
 class _NativeSqlEvaluator:
     def __init__(self, branch: Branch, query: Query) -> None:
         self.branch = branch
@@ -104,19 +107,24 @@ class _NativeSqlEvaluator:
         self.query_vars: Set[str] = set()
         self.sccs: List[_SqlScc] = []
         self.signature_to_scc: Dict[Signature, int] = {}
+        self.unsupported_reason: Optional[str] = None
         self.supported = self._prepare()
+
+    def _unsupported(self, reason: str) -> bool:
+        self.unsupported_reason = reason
+        return False
 
     def _prepare(self) -> bool:
         if self.branch.constraints:
-            return False
+            return self._unsupported("constraints are not supported by native SQL")
         if self.query.options.explain != "false":
-            return False
+            return self._unsupported("explain output is not supported by native SQL")
 
         query_atoms: List[_SqlAtom] = []
         for goal in self.query.goals:
             atom = self._goal_to_atom(goal)
             if atom is None:
-                return False
+                return self._unsupported("query goals contain unsupported constructs")
             query_atoms.append(atom)
 
         self.query_atoms = query_atoms
@@ -140,7 +148,9 @@ class _NativeSqlEvaluator:
             for rule_idx, rule in rules_by_head.get(signature, ()):
                 native_rule = self._rule_to_sql(rule_idx, rule)
                 if native_rule is None:
-                    return False
+                    return self._unsupported(
+                        "rules contain unsupported constructs for native SQL"
+                    )
                 relevant_rules.append(native_rule)
                 for body_atom in native_rule.body:
                     body_sig = (body_atom.pred_name, body_atom.pred_arity)
@@ -164,7 +174,9 @@ class _NativeSqlEvaluator:
             and self.query.options.epistemic_semantics.rule_applicability
             != RuleApplicabilitySemantics.body_truth_only
         ):
-            return False
+            return self._unsupported(
+                "recursive native SQL requires rule_applicability=body_truth_only"
+            )
 
         return True
 
@@ -172,7 +184,7 @@ class _NativeSqlEvaluator:
         effective_query_time, effective_valid_at, effective_known_at = (
             _resolve_effective_times(self.query)
         )
-        prefix = f"doxa_native_{int(time.time() * 1000)}"
+        prefix = f"doxa_native_{uuid4().hex}"
         tables = {
             "known": f"{prefix}_known",
             "delta": f"{prefix}_delta",
@@ -205,12 +217,12 @@ class _NativeSqlEvaluator:
                 )
             ]
 
-        answers = _apply_focus(answers, self.query.options.focus)
-        answers = _sort_answers(answers, self.query.options.order_by)
-        if self.query.options.offset:
-            answers = answers[self.query.options.offset :]
-        if self.query.options.limit is not None:
-            answers = answers[: self.query.options.limit]
+        answers = finalize_answers(
+            answers,
+            self.query,
+            is_closed_query=False,
+            closed_query_fallback=None,
+        )
 
         return QueryResult(
             answers=tuple(answers),

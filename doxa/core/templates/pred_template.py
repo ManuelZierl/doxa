@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import List
 
+from doxa.core.base_kinds import BaseKind
 from doxa.core.builtins import Builtin
+from doxa.core.predicate import Predicate
 from doxa.core.template import (
     DoxaStatement,
     PredRefTemplateArg,
@@ -18,6 +20,8 @@ from doxa.core.template import (
     TypeListTemplateArg,
     VarTemplateArg,
 )
+
+ALLOWED_ANNOTATIONS = {"description"}
 
 
 class PredTemplate:
@@ -30,8 +34,8 @@ class PredTemplate:
         pred foo/2 [int, entity] @{description: "..."}.
     """
 
-    def expand(self, call: TemplateCall, ctx: TemplateContext) -> List[DoxaStatement]:
-        # ── validate argument count ──────────────────────────────────
+    @staticmethod
+    def _parse_pred_signature(call: TemplateCall) -> tuple[str, int]:
         if len(call.args) == 0:
             raise ValueError(
                 "Template 'pred' requires at least one argument: a predicate reference (name/arity)."
@@ -41,7 +45,6 @@ class PredTemplate:
                 f"Template 'pred' accepts 1 or 2 positional arguments, got {len(call.args)}."
             )
 
-        # ── first arg: predicate reference ───────────────────────────
         pred_ref_arg = call.args[0]
         if isinstance(pred_ref_arg, VarTemplateArg):
             raise ValueError(
@@ -54,42 +57,48 @@ class PredTemplate:
                 f"first argument, but got {type(pred_ref_arg).__name__}."
             )
 
-        pred_name = pred_ref_arg.name
-        pred_arity = pred_ref_arg.arity
+        return pred_ref_arg.name, pred_ref_arg.arity
 
-        # ── second arg (optional): type list ─────────────────────────
-        type_list: List[str]
-        if len(call.args) == 2:
-            type_list_arg = call.args[1]
-            if not isinstance(type_list_arg, TypeListTemplateArg):
-                raise ValueError(
-                    "Template 'pred' expects an optional type list [t1, t2, ...] as its "
-                    f"second argument, but got {type(type_list_arg).__name__}."
-                )
-            type_list = type_list_arg.types
-            if len(type_list) != pred_arity:
-                raise ValueError(
-                    f"Template 'pred': type list length ({len(type_list)}) "
-                    f"does not match arity ({pred_arity}) for '{pred_name}/{pred_arity}'."
-                )
-        else:
-            type_list = [Builtin.entity.value] * pred_arity
+    @staticmethod
+    def _parse_type_list(
+        call: TemplateCall, pred_name: str, pred_arity: int
+    ) -> List[str]:
+        if len(call.args) != 2:
+            return [Builtin.entity.value] * pred_arity
 
-        # ── annotations ──────────────────────────────────────────────
-        description = call.annotations.get("description", None)
+        type_list_arg = call.args[1]
+        if not isinstance(type_list_arg, TypeListTemplateArg):
+            raise ValueError(
+                "Template 'pred' expects an optional type list [t1, t2, ...] as its "
+                f"second argument, but got {type(type_list_arg).__name__}."
+            )
 
-        # Validate annotation keys
-        unknown = set(call.annotations) - {"description"}
+        type_list = type_list_arg.types
+        if len(type_list) != pred_arity:
+            raise ValueError(
+                f"Template 'pred': type list length ({len(type_list)}) "
+                f"does not match arity ({pred_arity}) for '{pred_name}/{pred_arity}'."
+            )
+
+        return type_list
+
+    @staticmethod
+    def _parse_description(call: TemplateCall) -> str | None:
+        unknown = set(call.annotations) - ALLOWED_ANNOTATIONS
         if unknown:
             raise ValueError(
                 "Template 'pred' annotations only allow ['description']; "
                 f"got unsupported keys: {sorted(unknown)}"
             )
+        return call.annotations.get("description", None)
+
+    def expand(self, call: TemplateCall, ctx: TemplateContext) -> List[DoxaStatement]:
+        _ = ctx
+        pred_name, pred_arity = self._parse_pred_signature(call)
+        type_list = self._parse_type_list(call, pred_name, pred_arity)
+        description = self._parse_description(call)
 
         # ── build Predicate ──────────────────────────────────────────
-        from doxa.core.base_kinds import BaseKind
-        from doxa.core.predicate import Predicate
-
         pred = Predicate(
             kind=BaseKind.predicate,
             name=pred_name,
@@ -98,7 +107,7 @@ class PredTemplate:
             description=description,
         )
         # Mark as explicitly declared
-        object.__setattr__(pred, "_explicitly_declared", True)
+        pred.mark_explicitly_declared()
 
         # ── build type constraints ───────────────────────────────────
         statements: List[DoxaStatement] = [pred]

@@ -10,22 +10,16 @@ from doxa.core._parsing.annotation_utils import (
     extract_annotation_kwargs,
     is_default_annotation,
 )
+from doxa.core._parsing.literal_value import (
+    parse_literal_value,
+    render_literal_value,
+    validate_literal_value,
+)
 from doxa.core._parsing.parsing_utils import (
-    get_date_lit_regex,
-    get_datetime_lit_regex,
-    get_duration_lit_regex,
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
     get_pred_ref_regex,
-    parse_date_literal,
-    parse_datetime_literal,
-    parse_duration_literal,
-    parse_python_string_literal,
-    render_date_literal,
-    render_datetime_literal,
-    render_duration_literal,
-    render_string_literal,
     split_annotation_suffix,
     split_top_level,
 )
@@ -34,17 +28,21 @@ from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 from doxa.core.builtins import BUILTIN_ARITY, Builtin
-from doxa.core.entity import Entity
 from doxa.core.goal_kinds import GoalKind
 from doxa.core.literal_type import LiteralType
+from doxa.core.term_args import (
+    parse_entity_name,
+    parse_pred_ref,
+    parse_with_fallback,
+    render_pred_ref,
+)
 from doxa.core.term_kinds import TermKind
 from doxa.core.var import Var
 
 _GOAL_CALL_RE = get_goal_call_regex()
+_INT_RE = get_int_regex()
+_FLOAT_RE = get_float_regex()
 _PRED_REF_RE = get_pred_ref_regex()
-_DATE_LIT_RE = get_date_lit_regex()
-_DATETIME_LIT_RE = get_datetime_lit_regex()
-_DURATION_LIT_RE = get_duration_lit_regex()
 
 _RULE_RE = re.compile(
     r"""
@@ -66,37 +64,29 @@ def _builtin_names() -> set[str]:
 
 
 def rule_head_arg_from_doxa(inp: str) -> RuleHeadArg:
-    last_error: ValueError | None = None
-
-    for cls in (
-        RuleHeadLiteralArg,
-        RuleHeadPredRefArg,
-        RuleHeadVarArg,
-        RuleHeadEntityArg,
-    ):
-        try:
-            return cls.from_doxa(inp)
-        except ValueError as exc:
-            last_error = exc
-
-    raise ValueError(f"Invalid rule head argument: {inp!r}") from last_error
+    return parse_with_fallback(
+        inp,
+        (
+            RuleHeadLiteralArg.from_doxa,
+            RuleHeadPredRefArg.from_doxa,
+            RuleHeadVarArg.from_doxa,
+            RuleHeadEntityArg.from_doxa,
+        ),
+        invalid_message=f"Invalid rule head argument: {inp!r}",
+    )
 
 
 def rule_goal_arg_from_doxa(inp: str) -> RuleGoalArg:
-    last_error: ValueError | None = None
-
-    for cls in (
-        RuleGoalLiteralArg,
-        RuleGoalPredRefArg,
-        RuleGoalVarArg,
-        RuleGoalEntityArg,
-    ):
-        try:
-            return cls.from_doxa(inp)
-        except ValueError as exc:
-            last_error = exc
-
-    raise ValueError(f"Invalid rule goal argument: {inp!r}") from last_error
+    return parse_with_fallback(
+        inp,
+        (
+            RuleGoalLiteralArg.from_doxa,
+            RuleGoalPredRefArg.from_doxa,
+            RuleGoalVarArg.from_doxa,
+            RuleGoalEntityArg.from_doxa,
+        ),
+        invalid_message=f"Invalid rule goal argument: {inp!r}",
+    )
 
 
 def rule_goal_from_doxa(inp: str) -> RuleGoal:
@@ -271,12 +261,11 @@ class RuleHeadEntityArg(Base):
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleHeadEntityArg":
-        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.rule_head_arg,
             pos=0,
             term_kind=TermKind.ent,
-            ent_name=ent.name,
+            ent_name=parse_entity_name(inp),
         )
 
 
@@ -291,112 +280,28 @@ class RuleHeadLiteralArg(Base):
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "RuleHeadLiteralArg":
-        import datetime as _dt
-
-        if self.lit_type == LiteralType.str and not isinstance(self.value, str):
-            raise ValueError(
-                "Rule head literal with lit_type='str' must use a string value."
-            )
-        if self.lit_type == LiteralType.int and type(self.value) is not int:
-            raise ValueError(
-                "Rule head literal with lit_type='int' must use an int value."
-            )
-        if self.lit_type == LiteralType.float and type(self.value) is not float:
-            raise ValueError(
-                "Rule head literal with lit_type='float' must use a float value."
-            )
-        if self.lit_type == LiteralType.date and type(self.value) is not _dt.date:
-            raise ValueError(
-                "Rule head literal with lit_type='date' must use a date value."
-            )
-        if self.lit_type == LiteralType.datetime and not isinstance(
-            self.value, _dt.datetime
-        ):
-            raise ValueError(
-                "Rule head literal with lit_type='datetime' must use a datetime value."
-            )
-        if self.lit_type == LiteralType.duration and not isinstance(
-            self.value, _dt.timedelta
-        ):
-            raise ValueError(
-                "Rule head literal with lit_type='duration' must use a timedelta value."
-            )
+        try:
+            validate_literal_value(self.lit_type, self.value)
+        except ValueError as exc:
+            raise ValueError(f"RuleHeadLiteralArg {exc}") from exc
         return self
 
     def to_doxa(self) -> str:
-        if self.lit_type == LiteralType.str:
-            return render_string_literal(self.value)
-        if self.lit_type == LiteralType.int:
-            return str(self.value)
-        if self.lit_type == LiteralType.float:
-            return str(self.value)
-        if self.lit_type == LiteralType.date:
-            return render_date_literal(self.value)
-        if self.lit_type == LiteralType.datetime:
-            return render_datetime_literal(self.value)
-        if self.lit_type == LiteralType.duration:
-            return render_duration_literal(self.value)
-        raise ValueError(f"Unsupported literal type: {self.lit_type}")
+        return render_literal_value(self.lit_type, self.value)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleHeadLiteralArg":
-        s = inp.strip()
-
-        if _DATETIME_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.datetime,
-                value=parse_datetime_literal(s),
-            )
-
-        if _DATE_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.date,
-                value=parse_date_literal(s),
-            )
-
-        if _DURATION_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.duration,
-                value=parse_duration_literal(s),
-            )
-
-        if s.startswith('"') and s.endswith('"'):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.str,
-                value=parse_python_string_literal(s),
-            )
-
-        if _INT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.int,
-                value=int(s),
-            )
-
-        if _FLOAT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_head_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.float,
-                value=float(s),
-            )
-
-        raise ValueError(f"Invalid rule head literal argument: {inp!r}")
+        lit_type, value = parse_literal_value(
+            inp,
+            error_prefix="Invalid rule head literal argument",
+        )
+        return cls(
+            kind=BaseKind.rule_head_arg,
+            pos=0,
+            term_kind=TermKind.lit,
+            lit_type=lit_type,
+            value=value,
+        )
 
 
 class RuleHeadPredRefArg(Base):
@@ -407,20 +312,21 @@ class RuleHeadPredRefArg(Base):
     pred_ref_arity: int = Field(..., ge=0, description="Referenced predicate arity.")
 
     def to_doxa(self) -> str:
-        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+        return render_pred_ref(self.pred_ref_name, self.pred_ref_arity)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleHeadPredRefArg":
-        s = inp.strip()
-        if not _PRED_REF_RE.fullmatch(s):
-            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
-        name, arity_str = s.rsplit("/", 1)
+        name, arity = parse_pred_ref(
+            inp,
+            _PRED_REF_RE,
+            error_prefix="Invalid predicate reference argument",
+        )
         return cls(
             kind=BaseKind.rule_head_arg,
             pos=0,
             term_kind=TermKind.pred_ref,
             pred_ref_name=name,
-            pred_ref_arity=int(arity_str),
+            pred_ref_arity=arity,
         )
 
 
@@ -594,12 +500,11 @@ class RuleGoalEntityArg(Base):
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleGoalEntityArg":
-        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.rule_goal_arg,
             pos=0,
             term_kind=TermKind.ent,
-            ent_name=ent.name,
+            ent_name=parse_entity_name(inp),
         )
 
 
@@ -614,112 +519,28 @@ class RuleGoalLiteralArg(Base):
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "RuleGoalLiteralArg":
-        import datetime as _dt
-
-        if self.lit_type == LiteralType.str and not isinstance(self.value, str):
-            raise ValueError(
-                "Rule goal literal with lit_type='str' must use a string value."
-            )
-        if self.lit_type == LiteralType.int and type(self.value) is not int:
-            raise ValueError(
-                "Rule goal literal with lit_type='int' must use an int value."
-            )
-        if self.lit_type == LiteralType.float and type(self.value) is not float:
-            raise ValueError(
-                "Rule goal literal with lit_type='float' must use a float value."
-            )
-        if self.lit_type == LiteralType.date and type(self.value) is not _dt.date:
-            raise ValueError(
-                "Rule goal literal with lit_type='date' must use a date value."
-            )
-        if self.lit_type == LiteralType.datetime and not isinstance(
-            self.value, _dt.datetime
-        ):
-            raise ValueError(
-                "Rule goal literal with lit_type='datetime' must use a datetime value."
-            )
-        if self.lit_type == LiteralType.duration and not isinstance(
-            self.value, _dt.timedelta
-        ):
-            raise ValueError(
-                "Rule goal literal with lit_type='duration' must use a timedelta value."
-            )
+        try:
+            validate_literal_value(self.lit_type, self.value)
+        except ValueError as exc:
+            raise ValueError(f"RuleGoalLiteralArg {exc}") from exc
         return self
 
     def to_doxa(self) -> str:
-        if self.lit_type == LiteralType.str:
-            return render_string_literal(self.value)
-        if self.lit_type == LiteralType.int:
-            return str(self.value)
-        if self.lit_type == LiteralType.float:
-            return str(self.value)
-        if self.lit_type == LiteralType.date:
-            return render_date_literal(self.value)
-        if self.lit_type == LiteralType.datetime:
-            return render_datetime_literal(self.value)
-        if self.lit_type == LiteralType.duration:
-            return render_duration_literal(self.value)
-        raise ValueError(f"Unsupported literal type: {self.lit_type}")
+        return render_literal_value(self.lit_type, self.value)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleGoalLiteralArg":
-        s = inp.strip()
-
-        if _DATETIME_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.datetime,
-                value=parse_datetime_literal(s),
-            )
-
-        if _DATE_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.date,
-                value=parse_date_literal(s),
-            )
-
-        if _DURATION_LIT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.duration,
-                value=parse_duration_literal(s),
-            )
-
-        if s.startswith('"') and s.endswith('"'):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.str,
-                value=parse_python_string_literal(s),
-            )
-
-        if _INT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.int,
-                value=int(s),
-            )
-
-        if _FLOAT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.rule_goal_arg,
-                pos=0,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.float,
-                value=float(s),
-            )
-
-        raise ValueError(f"Invalid rule goal literal argument: {inp!r}")
+        lit_type, value = parse_literal_value(
+            inp,
+            error_prefix="Invalid rule goal literal argument",
+        )
+        return cls(
+            kind=BaseKind.rule_goal_arg,
+            pos=0,
+            term_kind=TermKind.lit,
+            lit_type=lit_type,
+            value=value,
+        )
 
 
 class RuleGoalPredRefArg(Base):
@@ -730,20 +551,21 @@ class RuleGoalPredRefArg(Base):
     pred_ref_arity: int = Field(..., ge=0, description="Referenced predicate arity.")
 
     def to_doxa(self) -> str:
-        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+        return render_pred_ref(self.pred_ref_name, self.pred_ref_arity)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "RuleGoalPredRefArg":
-        s = inp.strip()
-        if not _PRED_REF_RE.fullmatch(s):
-            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
-        name, arity_str = s.rsplit("/", 1)
+        name, arity = parse_pred_ref(
+            inp,
+            _PRED_REF_RE,
+            error_prefix="Invalid predicate reference argument",
+        )
         return cls(
             kind=BaseKind.rule_goal_arg,
             pos=0,
             term_kind=TermKind.pred_ref,
             pred_ref_name=name,
-            pred_ref_arity=int(arity_str),
+            pred_ref_arity=arity,
         )
 
 

@@ -48,6 +48,18 @@ class BranchRepository(ABC):
         """Return the names of all stored branches."""
         ...
 
+    # -- lifecycle ----------------------------------------------------------
+
+    def close(self) -> None:
+        """Release backend resources (default: no-op)."""
+        return None
+
+    def __enter__(self) -> "BranchRepository":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
     # ------------------------------------------------------------------
     # Fine-grained accessors – default implementations
     # Backends MAY override for performance.
@@ -81,21 +93,34 @@ class BranchRepository(ABC):
     def get_constraints(self, branch_name: str) -> List[Constraint]:
         return list(self._require(branch_name).constraints)
 
-    def add_belief_record(self, branch_name: str, record: BeliefRecord) -> None:
-        branch = self._require(branch_name)
-        updated = branch.model_copy(
+    def _append_belief_record_to_branch(
+        self, branch: Branch, record: BeliefRecord
+    ) -> Branch:
+        return branch.model_copy(
             update={"belief_records": [*branch.belief_records, record]}
         )
+
+    def _append_rule_to_branch(self, branch: Branch, rule: Rule) -> Branch:
+        return branch.model_copy(update={"rules": [*branch.rules, rule]})
+
+    def _append_constraint_to_branch(
+        self, branch: Branch, constraint: Constraint
+    ) -> Branch:
+        return branch.model_copy(
+            update={"constraints": [*branch.constraints, constraint]}
+        )
+
+    def add_belief_record(self, branch_name: str, record: BeliefRecord) -> None:
+        branch = self._require(branch_name)
+        updated = self._append_belief_record_to_branch(branch, record)
         self.save(updated)
 
     def add_rule(self, branch_name: str, rule: Rule) -> None:
         branch = self._require(branch_name)
-        updated = branch.model_copy(update={"rules": [*branch.rules, rule]})
+        updated = self._append_rule_to_branch(branch, rule)
         self.save(updated)
 
     def add_constraint(self, branch_name: str, constraint: Constraint) -> None:
         branch = self._require(branch_name)
-        updated = branch.model_copy(
-            update={"constraints": [*branch.constraints, constraint]}
-        )
+        updated = self._append_constraint_to_branch(branch, constraint)
         self.save(updated)

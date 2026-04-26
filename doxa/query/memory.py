@@ -1,16 +1,8 @@
-"""Compatibility wrapper for the in-memory query engine.
+"""Compatibility surface for the in-memory query engine.
 
-Shared evaluator internals live in :mod:`doxa.query.evaluator` so other
-engines, including PostgreSQL, do not depend on this module.
+Keep this module intentionally narrow so evaluator internals stay private.
 """
 
-from doxa.query import evaluator as _evaluator
+from doxa.query.evaluator import InMemoryQueryEngine
 
-for _name in dir(_evaluator):
-    if _name.startswith("__"):
-        continue
-    globals()[_name] = getattr(_evaluator, _name)
-
-
-del _evaluator
-del _name
+__all__ = ["InMemoryQueryEngine"]

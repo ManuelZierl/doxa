@@ -40,6 +40,11 @@ except ImportError:
     doxa_native = None
 
 
+_ENC_ENT = "ent:"
+_ENC_LIT = "lit:"
+_ENC_PRED_REF = "predref:"
+
+
 def _require_native() -> None:
     if doxa_native is None:
         raise ImportError(
@@ -114,8 +119,10 @@ class NativeBranchRepository(BranchRepository):
             return None
         try:
             return Branch.model_validate_json(path.read_text(encoding="utf-8"))
-        except Exception:
-            return None
+        except Exception as exc:  # pragma: no cover - defensive corruption path
+            raise ValueError(
+                f"Corrupt native branch snapshot for {branch_name!r} at {path}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # Argument ↔ SymId conversion
@@ -124,11 +131,13 @@ class NativeBranchRepository(BranchRepository):
     def _intern_belief_arg(self, arg: BeliefArg) -> int:
         """Intern a BeliefArg and return its SymId."""
         if isinstance(arg, BeliefEntityArg):
-            return self._store.intern(arg.ent_name)
+            return self._store.intern(f"{_ENC_ENT}{arg.ent_name}")
         elif isinstance(arg, BeliefLiteralArg):
-            return self._store.intern(arg.to_doxa())
+            return self._store.intern(f"{_ENC_LIT}{arg.to_doxa()}")
         elif isinstance(arg, BeliefPredRefArg):
-            return self._store.intern(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
+            return self._store.intern(
+                f"{_ENC_PRED_REF}{arg.pred_ref_name}/{arg.pred_ref_arity}"
+            )
         else:
             raise TypeError(f"Unknown belief arg type: {type(arg)}")
 
@@ -137,6 +146,24 @@ class NativeBranchRepository(BranchRepository):
         text = self._store.resolve(sym_id)
         if text is None:
             text = str(sym_id)
+
+        if text.startswith(_ENC_ENT):
+            return BeliefEntityArg(
+                kind=BaseKind.belief_arg,
+                term_kind=TermKind.ent,
+                ent_name=text[len(_ENC_ENT) :],
+            )
+
+        if text.startswith(_ENC_LIT):
+            from doxa.core.belief_record import BeliefLiteralArg
+
+            return BeliefLiteralArg.from_doxa(text[len(_ENC_LIT) :])
+
+        if text.startswith(_ENC_PRED_REF):
+            from doxa.core.belief_record import BeliefPredRefArg
+
+            return BeliefPredRefArg.from_doxa(text[len(_ENC_PRED_REF) :])
+
         # Try to reconstruct the original arg type.
         # Since we lose type info during interning, we default to entity.
         from doxa.core.belief_record import belief_arg_from_doxa
@@ -331,9 +358,7 @@ class NativeBranchRepository(BranchRepository):
         )
         branch = self.get(branch_name)
         if branch is not None:
-            updated = branch.model_copy(
-                update={"belief_records": [*branch.belief_records, record]}
-            )
+            updated = self._append_belief_record_to_branch(branch, record)
             self._persist_snapshot(updated)
 
     def add_rule(self, branch_name: str, rule: Rule) -> None:
@@ -342,9 +367,11 @@ class NativeBranchRepository(BranchRepository):
 
         head_args = [self._head_arg_to_term(a) for a in rule.head_args]
         body = [self._goal_to_dict(g) for g in rule.goals]
+        branch = self.get(branch_name)
+        rule_id = len(branch.rules) if branch is not None else 0
         self._store.add_rule(
             branch_name,
-            0,  # rule_id (auto-assigned)
+            rule_id,
             rule.head_pred_name,
             rule.head_pred_arity,
             head_args,
@@ -352,7 +379,6 @@ class NativeBranchRepository(BranchRepository):
             rule.b,
             rule.d,
         )
-        branch = self.get(branch_name)
         if branch is not None:
-            updated = branch.model_copy(update={"rules": [*branch.rules, rule]})
+            updated = self._append_rule_to_branch(branch, rule)
             self._persist_snapshot(updated)

@@ -22,7 +22,7 @@ from doxa.core.template import (
     parse_template_call,
     parse_use_templates,
 )
-from doxa.core.template_registry import TemplateRegistry
+from doxa.core.template_registry import TemplateRegistry, resolve_template_import
 from doxa.core.templates.pred_template import PredTemplate
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -309,10 +309,9 @@ class TestTemplateRegistry:
         assert isinstance(result[0], Predicate)
 
     def test_import_missing_module_raises(self) -> None:
-        reg = TemplateRegistry()
         imp = TemplateImport(module="nonexistent_module_xyz_123")
         with pytest.raises(ValueError, match="Cannot import template module"):
-            reg.import_templates(imp)
+            resolve_template_import(imp)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

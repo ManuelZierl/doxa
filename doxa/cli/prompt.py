@@ -17,6 +17,20 @@ from doxa.core.branch import Branch
 _DEFAULT_EXTRACT_TEMPLATE = Path(__file__).parent / "extract_prompt_template.md"
 _DEFAULT_QUERY_TEMPLATE = Path(__file__).parent / "query_prompt_template.md"
 
+_KB_SECTION_START = "{{KB_SECTION_START}}"
+_KB_SECTION_END = "{{KB_SECTION_END}}"
+
+
+def _remove_marked_section(text: str, start_marker: str, end_marker: str) -> str:
+    start = text.find(start_marker)
+    if start < 0:
+        return text
+    end = text.find(end_marker, start)
+    if end < 0:
+        return text.replace(start_marker, "")
+    end += len(end_marker)
+    return text[:start] + text[end:]
+
 
 def _detect_resource_type(resource: str, from_file: bool) -> str:
     """Auto-detect resource type: url, raw, or topic.
@@ -54,10 +68,10 @@ def _extract_kb_context(kb_path: Path) -> dict:
     Returns:
         Dict with "predicates" and "entities" arrays
     """
-    from doxa.cli.commands import _load_file
+    from doxa.cli.io import load_branch_file
 
     # Load the branch
-    branch = _load_file(kb_path, fix_missing_kinds=False)
+    branch = load_branch_file(kb_path, fix_missing_kinds=False)
 
     # Extract predicates (including unary type predicates)
     predicates = []
@@ -174,22 +188,10 @@ def generate_prompt(
     # Handle KB section
     if has_kb:
         prompt = prompt.replace("{{KB_JSON}}", kb_json)
+        prompt = prompt.replace(_KB_SECTION_START, "")
+        prompt = prompt.replace(_KB_SECTION_END, "")
     else:
-        # Remove KB section entirely
-        lines = prompt.split("\n")
-        filtered_lines = []
-        skip_until_next_section = False
-
-        for line in lines:
-            if "## KB (reuse-first)" in line:
-                skip_until_next_section = True
-                continue
-            if skip_until_next_section and line.startswith("## "):
-                skip_until_next_section = False
-            if not skip_until_next_section:
-                filtered_lines.append(line)
-
-        prompt = "\n".join(filtered_lines)
+        prompt = _remove_marked_section(prompt, _KB_SECTION_START, _KB_SECTION_END)
 
     return prompt
 

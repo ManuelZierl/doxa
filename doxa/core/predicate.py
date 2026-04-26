@@ -7,7 +7,7 @@ from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import split_top_level
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.builtins import BUILTIN_ARITY, Builtin
+from doxa.core.builtins import Builtin
 
 if TYPE_CHECKING:
     from doxa.core.constraint import Constraint
@@ -56,6 +56,9 @@ class Predicate(Base):
 
     _explicitly_declared: bool = PrivateAttr(default=False)
 
+    def mark_explicitly_declared(self) -> None:
+        object.__setattr__(self, "_explicitly_declared", True)
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
@@ -89,8 +92,8 @@ class Predicate(Base):
         if not isinstance(v, int):
             raise ValueError("Predicate.arity must be an integer")
 
-        if v < 0:
-            raise ValueError("Predicate.arity must be >= 0")
+        if v <= 0:
+            raise ValueError("Predicate.arity must be > 0")
 
         return v
 
@@ -165,7 +168,7 @@ class Predicate(Base):
             kwargs.update(raw)
 
         instance = cls(**kwargs)
-        object.__setattr__(instance, "_explicitly_declared", True)
+        instance.mark_explicitly_declared()
         return instance
 
     def generate_type_constraints(self) -> List["Constraint"]:
@@ -175,77 +178,8 @@ class Predicate(Base):
         For each argument position i with type T, generates:
             !:- pred_name(X0, ..., Xi, ..., Xn), not T(Xi).
         """
-        if self.type_list is None:
-            return []
+        from doxa.core.type_constraints import generate_predicate_type_constraints
 
-        # Import here to avoid circular dependency
-        from datetime import datetime, timezone
-
-        from doxa.core.constraint import Constraint
-        from doxa.core.goal import AtomGoal, VarArg
-        from doxa.core.goal_kinds import GoalKind
-        from doxa.core.var import Var
-
-        constraints: List[Constraint] = []
-
-        # Builtin type predicates that are evaluated at runtime, not via constraints
-        builtin_type_predicates = {b.value for b in Builtin if BUILTIN_ARITY[b] == 1}
-
-        for arg_idx, type_name in enumerate(self.type_list):
-            # Skip builtin type predicates - they're checked at runtime, not via constraints
-            if type_name in builtin_type_predicates:
-                continue
-
-            # Create the main predicate goal: pred_name(X0, X1, ...)
-            pred_args: List[VarArg] = []
-            for i in range(self.arity):
-                var = Var(kind=BaseKind.var, name=f"X{i}")
-                pred_args.append(
-                    VarArg(
-                        kind=BaseKind.goal_arg,
-                        pos=i,
-                        term_kind="var",
-                        var=var,
-                    )
-                )
-
-            pred_goal = AtomGoal(
-                kind=BaseKind.goal,
-                goal_kind=GoalKind.atom,
-                idx=0,
-                pred_name=self.name,
-                pred_arity=self.arity,
-                negated=False,
-                goal_args=pred_args,
-            )
-
-            # Create the type-checking goal: not type_name(X{arg_idx})
-            type_var = Var(kind=BaseKind.var, name=f"X{arg_idx}")
-            type_arg = VarArg(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="var",
-                var=type_var,
-            )
-
-            type_goal = AtomGoal(
-                kind=BaseKind.goal,
-                goal_kind=GoalKind.atom,
-                idx=1,
-                pred_name=type_name,
-                pred_arity=1,
-                negated=True,
-                goal_args=[type_arg],
-            )
-
-            goals = [pred_goal, type_goal]
-
-            constraint = Constraint(
-                kind=BaseKind.constraint,
-                created_at=datetime.now(timezone.utc),
-                goals=goals,
-            )
-
-            constraints.append(constraint)
-
-        return constraints
+        return generate_predicate_type_constraints(
+            self.name, self.arity, self.type_list
+        )

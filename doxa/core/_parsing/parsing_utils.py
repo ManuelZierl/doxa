@@ -50,6 +50,9 @@ def split_top_level(inp: str, sep: str = ",") -> List[str]:
     Raises:
         ValueError: If parentheses/braces are unbalanced or strings are unterminated
     """
+    if len(sep) != 1:
+        raise ValueError("Separator must be a single character.")
+
     parts: List[str] = []
     buf: List[str] = []
 
@@ -58,6 +61,8 @@ def split_top_level(inp: str, sep: str = ",") -> List[str]:
     in_single = False
     in_double = False
     escape = False
+
+    just_split = False
 
     for ch in inp:
         if escape:
@@ -111,21 +116,26 @@ def split_top_level(inp: str, sep: str = ",") -> List[str]:
         if ch == sep and depth_paren == 0 and depth_brace == 0:
             part = "".join(buf).strip()
             if not part:
-                raise ValueError("Empty item in comma-separated list.")
+                raise ValueError("empty entry between commas")
             parts.append(part)
             buf = []
+            just_split = True
             continue
 
         buf.append(ch)
+        if not ch.isspace():
+            just_split = False
 
     if in_single or in_double:
-        raise ValueError("Unterminated quoted string.")
+        raise ValueError("unterminated quoted string")
     if depth_paren != 0:
         raise ValueError("Unbalanced parentheses.")
     if depth_brace != 0:
         raise ValueError("Unbalanced braces.")
 
     tail = "".join(buf).strip()
+    if just_split and not tail:
+        raise ValueError("trailing comma")
     if tail:
         parts.append(tail)
 
@@ -149,6 +159,7 @@ def split_annotation_suffix(inp: str) -> tuple[str, str | None]:
     in_double = False
     escape = False
     depth_paren = 0
+    depth_brace = 0
 
     i = 0
     while i < len(s):
@@ -190,10 +201,25 @@ def split_annotation_suffix(inp: str) -> tuple[str, str | None]:
             i += 1
             continue
 
-        if depth_paren == 0 and s.startswith("@{", i):
+        if ch == "{":
+            depth_brace += 1
+            i += 1
+            continue
+
+        if ch == "}":
+            depth_brace -= 1
+            if depth_brace < 0:
+                raise ValueError("Unbalanced braces.")
+            i += 1
+            continue
+
+        if depth_paren == 0 and depth_brace == 0 and s.startswith("@{", i):
             return s[:i].strip(), s[i:].strip()
 
         i += 1
+
+    if depth_brace != 0:
+        raise ValueError("Unbalanced braces.")
 
     return s, None
 
@@ -361,31 +387,35 @@ def render_datetime_literal(dt: datetime) -> str:
 
 def render_duration_literal(td: timedelta) -> str:
     """Render a Python timedelta as a Doxa duration literal (ISO 8601)."""
-    total_seconds = int(td.total_seconds())
-    if total_seconds < 0:
+    total_microseconds = (
+        td.days * 86_400_000_000 + td.seconds * 1_000_000 + td.microseconds
+    )
+    if total_microseconds < 0:
         sign = "-"
-        total_seconds = -total_seconds
+        total_microseconds = -total_microseconds
     else:
         sign = ""
 
-    days = total_seconds // 86400
-    remainder = total_seconds % 86400
-    hours = remainder // 3600
-    remainder = remainder % 3600
-    minutes = remainder // 60
-    seconds = remainder % 60
+    days, remainder = divmod(total_microseconds, 86_400_000_000)
+    hours, remainder = divmod(remainder, 3_600_000_000)
+    minutes, remainder = divmod(remainder, 60_000_000)
+    seconds, microseconds = divmod(remainder, 1_000_000)
 
     parts = [f"{sign}P"]
     if days:
         parts.append(f"{days}D")
-    if hours or minutes or seconds:
+    if hours or minutes or seconds or microseconds:
         parts.append("T")
         if hours:
             parts.append(f"{hours}H")
         if minutes:
             parts.append(f"{minutes}M")
-        if seconds:
-            parts.append(f"{seconds}S")
+        if seconds or microseconds:
+            if microseconds:
+                sec = f"{seconds}.{microseconds:06d}".rstrip("0")
+            else:
+                sec = str(seconds)
+            parts.append(f"{sec}S")
     if len(parts) == 1:
         # Zero duration
         parts.append("T0S")

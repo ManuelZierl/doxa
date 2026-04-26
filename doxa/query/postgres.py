@@ -24,14 +24,12 @@ Usage::
 from __future__ import annotations
 
 import hashlib
-import os
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from doxa.core.branch import Branch
 from doxa.core.query import Query
 from doxa.query.engine import EngineInfo, QueryEngine, QueryResult
-from doxa.query.postgres_native import try_evaluate_native
+from doxa.query.postgres_native import probe_native_support, try_evaluate_native
 
 if TYPE_CHECKING:
     from doxa.persistence.postgres import PostgresBranchRepository
@@ -55,19 +53,9 @@ from doxa.core.epistemic_semantics import (
     RulePropagationSemantics,
     SupportAggregationSemantics,
 )
-from doxa.query.engine import BelnapStatus, QueryAnswer
 from doxa.query.evaluator import (
-    ExplainCollector,
-    _aggregate_answers_from_truth,
-    _apply_focus,
-    _build_fact_index,
-    _compile_query_goals,
-    _Context,
-    _inject_assume_facts,
-    _query_var_names,
-    _resolve_effective_times,
-    _solve_body_truth,
-    _sort_answers,
+    evaluate_with_records,
+    resolve_effective_times,
 )
 
 
@@ -86,9 +74,25 @@ class PostgresQueryEngine(QueryEngine):
         used to fetch belief records with server-side filtering.
     """
 
-    def __init__(self, repo: "PostgresBranchRepository") -> None:
+    def __init__(
+        self,
+        repo: "PostgresBranchRepository",
+        *,
+        native_sql_enabled: bool | None = None,
+        auto_sync_on_evaluate: bool = True,
+    ) -> None:
         self._repo = repo
         self._synced_branch_signatures: dict[str, str] = {}
+        self._native_sql_enabled = native_sql_enabled
+        self._auto_sync_on_evaluate = auto_sync_on_evaluate
+        self.last_native_fallback_reason: str | None = None
+
+    def _use_native_sql(self) -> bool:
+        if self._native_sql_enabled is not None:
+            return self._native_sql_enabled
+        import os
+
+        return os.environ.get("DOXA_POSTGRES_NATIVE_SQL") == "1"
 
     @property
     def info(self) -> EngineInfo:
@@ -140,15 +144,27 @@ class PostgresQueryEngine(QueryEngine):
         self._repo.save(branch)
         self._synced_branch_signatures[branch.name] = signature
 
+    def sync_branch(self, branch: Branch) -> None:
+        """Explicitly persist a branch snapshot for subsequent evaluations."""
+        self._ensure_branch_saved(branch)
+
     def _evaluate(self, branch: Branch, query: Query) -> QueryResult:
         effective_query_time, effective_valid_at, effective_known_at = (
-            _resolve_effective_times(query)
+            resolve_effective_times(query)
         )
 
-        # ── Auto-sync: ensure the branch is in the database ──────────
-        self._ensure_branch_saved(branch)
-        if os.environ.get("DOXA_POSTGRES_NATIVE_SQL") == "1":
-            native_result = try_evaluate_native(self._repo._conn, branch, query)
+        # ── Optional auto-sync: ensure branch is in the database ─────
+        if self._auto_sync_on_evaluate:
+            self._ensure_branch_saved(branch)
+        if self._use_native_sql():
+            supported, reason = probe_native_support(branch, query)
+            if not supported:
+                self.last_native_fallback_reason = reason
+            else:
+                self.last_native_fallback_reason = None
+            native_result = try_evaluate_native(
+                self._repo.get_connection(), branch, query
+            )
             if native_result is not None:
                 return native_result
 
@@ -159,75 +175,16 @@ class PostgresQueryEngine(QueryEngine):
             known_at=effective_known_at,
         )
 
-        # Build the in-memory fact index from the pre-filtered records.
-        # Since the SQL already enforced temporal visibility we pass
-        # permissive time bounds so _build_fact_index keeps everything.
-        _FAR_FUTURE = datetime(9999, 12, 31, tzinfo=timezone.utc)
-        fact_index = _build_fact_index(
-            records,
-            valid_at=effective_valid_at,
-            known_at=_FAR_FUTURE,
-        )
-
-        compiled_goals = _compile_query_goals(query)
-        query_vars = _query_var_names(query)
-
-        # ── Inject explicit assume(...) facts ────────────────────────────────
-        _inject_assume_facts(compiled_goals, fact_index, {})
-
-        initial_subst = {}
-
-        ctx = _Context(
-            fact_index=fact_index,
-            rules=tuple(branch.rules),
-            constraints=tuple(branch.constraints),
+        answers, explain = evaluate_with_records(
             query=query,
+            records=records,
+            rules=branch.rules,
+            constraints=branch.constraints,
             effective_query_time=effective_query_time,
             effective_valid_at=effective_valid_at,
             effective_known_at=effective_known_at,
-            max_depth=query.options.max_depth,
-            explain_enabled=(query.options.explain != "false"),
+            records_prefiltered=True,
         )
-
-        collector = ExplainCollector(enabled=ctx.explain_enabled)
-
-        truth_rows = list(
-            _solve_body_truth(
-                compiled_goals,
-                initial_subst,
-                ctx,
-                collector,
-                depth=0,
-                current_support=1.0,
-                current_falsity=0.0,
-                current_atoms=(),
-                apply_constraints=True,
-            )
-        )
-        answers = _aggregate_answers_from_truth(truth_rows, query, query_vars)
-
-        # Closed query: return a single neither-answer if unsupported.
-        if not query_vars and not answers:
-            answers = [
-                QueryAnswer(
-                    bindings={},
-                    b=0.0,
-                    d=0.0,
-                    belnap_status=BelnapStatus.neither,
-                )
-            ]
-
-        # ── Post-processing ──────────────────────────────────────────
-        answers = _apply_focus(answers, query.options.focus)
-        answers = _sort_answers(answers, query.options.order_by)
-
-        if query.options.offset:
-            answers = answers[query.options.offset :]
-
-        if query.options.limit is not None:
-            answers = answers[: query.options.limit]
-
-        explain = tuple(collector.events) if ctx.explain_enabled else None
 
         return QueryResult(
             answers=tuple(answers),
