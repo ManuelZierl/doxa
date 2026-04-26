@@ -29,6 +29,9 @@ class _FakeNativeStore:
     def add_rule(self, *args, **kwargs):
         return 0
 
+    def add_constraint(self, *args, **kwargs):
+        return 0
+
     def get_facts(self, branch_name: str):
         return []
 

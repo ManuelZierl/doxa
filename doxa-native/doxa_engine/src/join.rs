@@ -197,6 +197,14 @@ fn eval_builtin_goal(
             eval_arithmetic(store, op, args, incoming)
         }
         BuiltinOp::Between => eval_between(store, args, incoming),
+        BuiltinOp::Int
+        | BuiltinOp::String
+        | BuiltinOp::Float
+        | BuiltinOp::Entity
+        | BuiltinOp::PredicateRef
+        | BuiltinOp::Date
+        | BuiltinOp::DateTime
+        | BuiltinOp::Duration => eval_type_builtin(store, op, args, incoming),
     }
 }
 
@@ -418,6 +426,106 @@ fn eval_between(store: &DoxaStore, args: &[Term], incoming: &[BodyMatch]) -> Vec
             let hi = resolve_to_f64(store, &args[2], &bm.subst);
             match (x, lo, hi) {
                 (Some(xv), Some(lov), Some(hiv)) => lov <= xv && xv <= hiv,
+                _ => false,
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+fn resolve_to_text(store: &DoxaStore, term: &Term, subst: &Subst) -> Option<String> {
+    match term {
+        Term::Var(_) => {
+            let sym_id = resolve_term(term, subst)?;
+            store.symbol_store.get_text(sym_id).ok()?
+        }
+        Term::Entity(sym_id) | Term::Str(sym_id) => store.symbol_store.get_text(*sym_id).ok()?,
+        Term::Int(v) => Some(v.to_string()),
+        Term::Float(bits) => Some(f64::from_bits(*bits).to_string()),
+    }
+}
+
+fn is_int_text(text: &str) -> bool {
+    let s = text.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let body = if let Some(rest) = s.strip_prefix('-') {
+        rest
+    } else {
+        s
+    };
+    !body.is_empty() && body.chars().all(|c| c.is_ascii_digit())
+}
+
+fn is_float_text(text: &str) -> bool {
+    let s = text.trim();
+    s.parse::<f64>().is_ok() && !is_int_text(s)
+}
+
+fn is_string_literal_text(text: &str) -> bool {
+    text.len() >= 2 && text.starts_with('"') && text.ends_with('"')
+}
+
+fn is_predicate_ref_text(text: &str) -> bool {
+    let mut parts = text.split('/');
+    let Some(name) = parts.next() else {
+        return false;
+    };
+    let Some(arity) = parts.next() else {
+        return false;
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    let mut name_chars = name.chars();
+    let Some(first) = name_chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_lowercase() {
+        return false;
+    }
+    if !name_chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return false;
+    }
+    !arity.is_empty() && arity.chars().all(|c| c.is_ascii_digit())
+}
+
+fn eval_type_builtin(
+    store: &DoxaStore,
+    op: &BuiltinOp,
+    args: &[Term],
+    incoming: &[BodyMatch],
+) -> Vec<BodyMatch> {
+    if args.len() != 1 {
+        return Vec::new();
+    }
+
+    incoming
+        .iter()
+        .filter(|bm| {
+            let Some(text) = resolve_to_text(store, &args[0], &bm.subst) else {
+                return false;
+            };
+
+            match op {
+                BuiltinOp::Int => is_int_text(&text),
+                BuiltinOp::Float => is_float_text(&text),
+                BuiltinOp::String => is_string_literal_text(&text),
+                BuiltinOp::Date => text.starts_with("d\"") && text.ends_with('"'),
+                BuiltinOp::DateTime => text.starts_with("dt\"") && text.ends_with('"'),
+                BuiltinOp::Duration => text.starts_with("dur\"") && text.ends_with('"'),
+                BuiltinOp::PredicateRef => is_predicate_ref_text(&text),
+                BuiltinOp::Entity => {
+                    let is_temporal = (text.starts_with("d\"")
+                        || text.starts_with("dt\"")
+                        || text.starts_with("dur\""))
+                        && text.ends_with('"');
+                    !(is_int_text(&text)
+                        || is_float_text(&text)
+                        || is_string_literal_text(&text)
+                        || is_temporal)
+                }
                 _ => false,
             }
         })

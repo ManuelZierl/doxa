@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use doxa_core::rule::Rule;
+use doxa_core::rule::{Constraint, Rule};
 use doxa_core::types::SymId;
 
 /// Monotonically increasing event identifier.
@@ -47,6 +47,13 @@ pub enum EdbEvent {
         rule: Rule,
     },
 
+    /// Add a constraint to the branch.
+    AddConstraint {
+        event_id: EventId,
+        branch: String,
+        constraint: Constraint,
+    },
+
     /// Retract a previously asserted fact by its event ID.
     RetractFact {
         event_id: EventId,
@@ -63,6 +70,7 @@ impl EdbEvent {
             EdbEvent::AssertFact { event_id, .. } => *event_id,
             EdbEvent::DeclarePredicate { event_id, .. } => *event_id,
             EdbEvent::AddRule { event_id, .. } => *event_id,
+            EdbEvent::AddConstraint { event_id, .. } => *event_id,
             EdbEvent::RetractFact { event_id, .. } => *event_id,
         }
     }
@@ -73,6 +81,7 @@ impl EdbEvent {
             EdbEvent::AssertFact { branch, .. } => branch,
             EdbEvent::DeclarePredicate { branch, .. } => branch,
             EdbEvent::AddRule { branch, .. } => branch,
+            EdbEvent::AddConstraint { branch, .. } => branch,
             EdbEvent::RetractFact { branch, .. } => branch,
         }
     }

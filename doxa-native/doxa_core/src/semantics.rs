@@ -46,6 +46,19 @@ impl Default for RulePropagationSemantics {
     }
 }
 
+/// How constraint body truth/falsity is propagated to violations.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConstraintPropagationSemantics {
+    /// `violation = applicability * constraint.b`.
+    BodyTimesConstraintWeightsToViolation,
+}
+
+impl Default for ConstraintPropagationSemantics {
+    fn default() -> Self {
+        Self::BodyTimesConstraintWeightsToViolation
+    }
+}
+
 /// How multiple rule derivations for the same head atom are aggregated.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SupportAggregationSemantics {
@@ -73,12 +86,27 @@ impl Default for RuleApplicabilitySemantics {
     }
 }
 
+/// Whether a constraint fires based on body truth alone, or discounted by falsity.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConstraintApplicabilitySemantics {
+    BodyTruthOnly,
+    BodyTruthDiscountedByBodyFalsity,
+}
+
+impl Default for ConstraintApplicabilitySemantics {
+    fn default() -> Self {
+        Self::BodyTruthDiscountedByBodyFalsity
+    }
+}
+
 /// Full epistemic semantics configuration for an evaluation session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct EpistemicSemantics {
     pub body_truth: BodyTruthSemantics,
     pub body_falsity: BodyFalsitySemantics,
     pub rule_propagation: RulePropagationSemantics,
+    pub constraint_propagation: ConstraintPropagationSemantics,
     pub support_aggregation: SupportAggregationSemantics,
     pub rule_applicability: RuleApplicabilitySemantics,
+    pub constraint_applicability: ConstraintApplicabilitySemantics,
 }

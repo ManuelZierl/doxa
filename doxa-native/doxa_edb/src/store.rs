@@ -13,7 +13,7 @@ use std::path::Path;
 
 use sled::{Db, Tree};
 
-use doxa_core::rule::Rule;
+use doxa_core::rule::{Constraint, Rule};
 use doxa_core::types::SymId;
 
 use crate::event_log::{EdbEvent, EventId};
@@ -199,6 +199,17 @@ impl EdbStore {
         self.append_event(&event)
     }
 
+    /// Add a constraint. Returns the event ID.
+    pub fn add_constraint(&self, branch: &str, constraint: Constraint) -> Result<EventId> {
+        let event_id = self.next_event_id()?;
+        let event = EdbEvent::AddConstraint {
+            event_id,
+            branch: branch.to_string(),
+            constraint,
+        };
+        self.append_event(&event)
+    }
+
     /// Retract a previously asserted fact by its original event ID.
     pub fn retract_fact(&self, branch: &str, target_event_id: EventId) -> Result<EventId> {
         let event_id = self.next_event_id()?;
@@ -296,6 +307,36 @@ impl EdbStore {
         }
 
         Ok(rules)
+    }
+
+    /// Return all constraints for a branch (up to watermark).
+    pub fn get_constraints(
+        &self,
+        branch: &str,
+        watermark: Option<EventId>,
+    ) -> Result<Vec<Constraint>> {
+        let mut constraints = Vec::new();
+
+        for item in self.event_tree.iter() {
+            let (_, val_bytes) = item?;
+            let event: EdbEvent = bincode::deserialize(val_bytes.as_ref())?;
+
+            if let Some(wm) = watermark {
+                if event.event_id() > wm {
+                    break;
+                }
+            }
+
+            if event.branch() != branch {
+                continue;
+            }
+
+            if let EdbEvent::AddConstraint { constraint, .. } = event {
+                constraints.push(constraint);
+            }
+        }
+
+        Ok(constraints)
     }
 
     /// Return all declared predicates for a branch (name, arity).

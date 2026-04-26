@@ -49,6 +49,7 @@ from doxa.core.rule import (
     RuleHeadPredRefArg,
     RuleHeadVarArg,
 )
+from doxa.query._epistemic import _aggregate_values, _derive_belnap_status
 from doxa.query.engine import EngineInfo, QueryAnswer, QueryEngine, QueryResult
 from doxa.query.postprocess import finalize_answers
 
@@ -181,6 +182,7 @@ class NativeQueryEngine(QueryEngine):
                 support_aggregation=(
                     SupportAggregationSemantics.noisy_or,
                     SupportAggregationSemantics.maximum,
+                    SupportAggregationSemantics.capped_sum,
                 ),
                 belnap_status=(BelnapStatusSemantics.nonzero,),
                 non_atom=(NonAtomSemantics.crisp_filters,),
@@ -385,32 +387,28 @@ class NativeQueryEngine(QueryEngine):
                     )
             rule_specs.append((i, rule, head_args_raw, body_raw))
 
-        # Pre-collect texts from ground constraints
-        constraint_facts = []
-        for constraint in branch.constraints:
-            all_ground = True
+        # Pre-collect texts from constraints
+        constraint_specs = []
+        for i, constraint in enumerate(branch.constraints):
+            body_raw = []
             for goal in constraint.goals:
-                if not isinstance(goal, AtomGoal):
-                    all_ground = False
-                    break
-                if any(isinstance(a, VarArg) for a in goal.goal_args):
-                    all_ground = False
-                    break
-            if not all_ground:
-                continue
-            for goal in constraint.goals:
-                if not goal.negated:
-                    arg_indices = [_collect_goal_arg(a) for a in goal.goal_args]
-                    constraint_facts.append(
-                        (
-                            goal.pred_name,
-                            goal.pred_arity,
-                            arg_indices,
-                            0.0,
-                            constraint.b,
-                            constraint.src,
-                        )
+                if isinstance(goal, BuiltinGoal):
+                    body_raw.append(
+                        {
+                            "builtin_name": goal.builtin_name.value,
+                            "args_raw": [_collect_goal_arg(a) for a in goal.goal_args],
+                        }
                     )
+                elif isinstance(goal, AtomGoal):
+                    body_raw.append(
+                        {
+                            "pred_name": goal.pred_name,
+                            "pred_arity": goal.pred_arity,
+                            "negated": goal.negated,
+                            "args_raw": [_collect_goal_arg(a) for a in goal.goal_args],
+                        }
+                    )
+            constraint_specs.append((i, constraint, body_raw))
 
         # ── Single bulk intern call ───────────────────────────────────
         sym_ids = store.intern_batch(texts_to_intern) if texts_to_intern else []
@@ -427,11 +425,6 @@ class NativeQueryEngine(QueryEngine):
         for pred_name, pred_arity, arg_indices, b, d, src in fact_specs:
             args = [sym_ids[idx] for idx in arg_indices]
             bulk_facts.append((pred_name, pred_arity, args, b, d, src))
-        # Also add constraint disbelief facts
-        for pred_name, pred_arity, arg_raws, b, d, src in constraint_facts:
-            args = [_resolve_arg(r) for r in arg_raws]
-            bulk_facts.append((pred_name, pred_arity, args, b, d, src))
-
         if bulk_facts:
             store.assert_facts_bulk(branch_name, bulk_facts)
 
@@ -467,9 +460,85 @@ class NativeQueryEngine(QueryEngine):
                 rule.d,
             )
 
+        # ── Add constraints ───────────────────────────────────────────
+        for i, constraint, body_raw in constraint_specs:
+            body = []
+            for g in body_raw:
+                if "builtin_name" in g:
+                    body.append(
+                        {
+                            "builtin_name": g["builtin_name"],
+                            "args": [_resolve_arg(a) for a in g["args_raw"]],
+                        }
+                    )
+                else:
+                    body.append(
+                        {
+                            "pred_name": g["pred_name"],
+                            "pred_arity": g["pred_arity"],
+                            "negated": g["negated"],
+                            "args": [_resolve_arg(a) for a in g["args_raw"]],
+                        }
+                    )
+            store.add_constraint(
+                branch_name,
+                i,
+                body,
+                constraint.b,
+                constraint.d,
+            )
+
     # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _aggregation_name_for_query(query: Query) -> str:
+        semantics = query.options.epistemic_semantics.support_aggregation
+        if semantics == SupportAggregationSemantics.noisy_or:
+            return "noisy_or"
+        if semantics == SupportAggregationSemantics.maximum:
+            return "maximum"
+        if semantics == SupportAggregationSemantics.capped_sum:
+            return "capped_sum"
+        raise ValueError(f"Unsupported support aggregation semantics: {semantics!r}")
+
+    @staticmethod
+    def _configure_native_semantics(store, query: Query) -> None:
+        if not hasattr(store, "set_semantics"):
+            return
+        store.set_semantics(
+            query.options.epistemic_semantics.rule_applicability.value,
+            query.options.epistemic_semantics.constraint_applicability.value,
+        )
+
+    def _configure_predicates_for_query(
+        self, store, branch: Branch, query: Query
+    ) -> None:
+        aggregation = self._aggregation_name_for_query(query)
+        evidence_mode = "none" if aggregation == "maximum" else "proof_tree"
+
+        pred_names: set[str] = set()
+        pred_names.update(p.name for p in branch.predicates)
+        pred_names.update(r.pred_name for r in branch.belief_records)
+        pred_names.update(r.head_pred_name for r in branch.rules)
+        for rule in branch.rules:
+            for goal in rule.goals:
+                if isinstance(goal, RuleAtomGoal):
+                    pred_names.add(goal.pred_name)
+        for constraint in branch.constraints:
+            for goal in constraint.goals:
+                if isinstance(goal, AtomGoal):
+                    pred_names.add(goal.pred_name)
+        for goal in query.goals:
+            if isinstance(goal, AtomGoal):
+                pred_names.add(goal.pred_name)
+            elif isinstance(goal, AssumeGoal):
+                pred_names.update(atom.pred_name for atom in goal.assumptions)
+
+        for pred_name in pred_names:
+            if hasattr(store, "configure_predicate"):
+                store.configure_predicate(pred_name, aggregation, evidence_mode)
 
     def _scan_goal(
         self,
@@ -796,6 +865,10 @@ class NativeQueryEngine(QueryEngine):
         # Create an in-memory store for this evaluation (no filesystem I/O)
         store = doxa_native.NativeStore.new_temporary()
 
+        # Configure session-level semantics and predicate aggregation for this query.
+        self._configure_native_semantics(store, query)
+        self._configure_predicates_for_query(store, branch, query)
+
         # Load branch data
         self._load_branch(store, branch_for_eval)
 
@@ -861,29 +934,28 @@ class NativeQueryEngine(QueryEngine):
                 envs = [({}, 0.0, 0.0)]
 
         # ── Build answer rows ─────────────────────────────────────────
-        answers: List[QueryAnswer] = []
-        seen: set[tuple] = set()
-
+        grouped: Dict[tuple, Dict[str, Any]] = {}
         for env, b, d in envs:
-            status = _belnap_from_bd(b, d)
-
             # Filter anonymous vars from bindings, sort alphabetically
             filtered = dict(
                 sorted((k, v) for k, v in env.items() if k not in query.anon_vars)
             )
-
-            # Distinct: deduplicate by (bindings_tuple)
             key = tuple(sorted(filtered.items()))
-            if key in seen:
-                continue
-            seen.add(key)
+            if key not in grouped:
+                grouped[key] = {"bindings": filtered, "b_vals": [], "d_vals": []}
+            grouped[key]["b_vals"].append(b)
+            grouped[key]["d_vals"].append(d)
 
+        answers: List[QueryAnswer] = []
+        for item in grouped.values():
+            agg_b = _aggregate_values(item["b_vals"], query)
+            agg_d = _aggregate_values(item["d_vals"], query)
             answers.append(
                 QueryAnswer(
-                    bindings=filtered,
-                    b=b,
-                    d=d,
-                    belnap_status=status,
+                    bindings=item["bindings"],
+                    b=agg_b,
+                    d=agg_d,
+                    belnap_status=_derive_belnap_status(agg_b, agg_d, query),
                 )
             )
 
@@ -894,10 +966,22 @@ class NativeQueryEngine(QueryEngine):
             closed_query_fallback=None,
         )
 
+        explain_payload = None
+        if query.options.explain != "false":
+            explain_payload = (
+                {
+                    "engine": "native",
+                    "mode": query.options.explain,
+                    "goal_count": len(remaining_goals),
+                    "row_count": len(envs),
+                },
+            )
+
         return QueryResult(
             answers=tuple(answers),
             effective_query_time=effective_query_time,
             effective_valid_at=effective_valid_at,
             effective_known_at=effective_known_at,
             epistemic_semantics=query.options.epistemic_semantics,
+            explain=explain_payload,
         )

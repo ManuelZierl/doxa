@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use doxa_core::rule::CompiledRule;
+use doxa_core::rule::{CompiledConstraint, CompiledGoal, CompiledRule};
 use doxa_core::scc::compute_sccs;
 use doxa_core::semantics::EpistemicSemantics;
 use doxa_core::types::PredId;
@@ -67,6 +67,7 @@ pub type Result<T> = std::result::Result<T, EvalError>;
 pub fn evaluate_to_fixpoint(
     store: &DoxaStore,
     rules: &[CompiledRule],
+    constraints: &[CompiledConstraint],
     semantics: &EpistemicSemantics,
     pred_map: &HashMap<String, PredId>,
     max_depth: Option<usize>,
@@ -80,6 +81,12 @@ pub fn evaluate_to_fixpoint(
     let sccs = compute_sccs(&core_rules);
     let mut total_iterations = 0;
     let mut atoms_changed = 0;
+
+    // Pre-pass: apply constraints against currently visible atoms (typically
+    // EDB facts) so their disbelief can affect subsequent rule applicability.
+    for constraint in constraints {
+        atoms_changed += fire_constraint(store, constraint, semantics)?;
+    }
 
     for scc in &sccs {
         // Collect rules whose head predicate is in this SCC
@@ -205,7 +212,7 @@ fn fire_rule(
         let atom_key = AtomKey::new(rule.head_pred_id, head_args);
 
         // Compute applicability based on semantics
-        let applicability = compute_applicability(bm, semantics);
+        let applicability = compute_rule_applicability(bm, semantics);
         if applicability <= 0.0 {
             continue;
         }
@@ -234,7 +241,7 @@ fn fire_rule(
 }
 
 /// Compute rule applicability based on body truth and semantics.
-fn compute_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 {
+fn compute_rule_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 {
     use doxa_core::semantics::RuleApplicabilitySemantics;
 
     let a = match semantics.rule_applicability {
@@ -245,6 +252,103 @@ fn compute_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 
     };
 
     a.clamp(0.0, 1.0)
+}
+
+fn compute_constraint_applicability(bm: &BodyMatch, semantics: &EpistemicSemantics) -> f64 {
+    use doxa_core::semantics::ConstraintApplicabilitySemantics;
+
+    let a = match semantics.constraint_applicability {
+        ConstraintApplicabilitySemantics::BodyTruthOnly => bm.body_b,
+        ConstraintApplicabilitySemantics::BodyTruthDiscountedByBodyFalsity => {
+            bm.body_b * (1.0 - bm.body_d)
+        }
+    };
+
+    a.clamp(0.0, 1.0)
+}
+
+/// Fire a single integrity constraint.
+///
+/// For each successful body match, applies a disbelief contribution to each
+/// non-negated atom goal grounded by that substitution.
+fn fire_constraint(
+    store: &DoxaStore,
+    constraint: &CompiledConstraint,
+    semantics: &EpistemicSemantics,
+) -> Result<usize> {
+    let mut changed = 0;
+
+    let initial = vec![BodyMatch {
+        subst: Subst::new(),
+        body_b: 1.0,
+        body_d: 0.0,
+    }];
+
+    let mut current = initial;
+    for goal in &constraint.goals {
+        current = join::eval_goal(store, goal, &current);
+        if current.is_empty() {
+            return Ok(0);
+        }
+    }
+
+    for bm in &current {
+        let applicability = compute_constraint_applicability(bm, semantics);
+        if applicability <= 0.0 {
+            continue;
+        }
+
+        use doxa_core::semantics::ConstraintPropagationSemantics;
+
+        let violation_d = match semantics.constraint_propagation {
+            ConstraintPropagationSemantics::BodyTimesConstraintWeightsToViolation => {
+                applicability * constraint.b
+            }
+        };
+        if violation_d <= 0.0 {
+            continue;
+        }
+
+        for (goal_idx, goal) in constraint.goals.iter().enumerate() {
+            let (pred_id, negated, args) = match goal {
+                CompiledGoal::Atom {
+                    pred_id,
+                    negated,
+                    args,
+                    ..
+                } => (*pred_id, *negated, args),
+                CompiledGoal::Builtin { .. } => continue,
+            };
+
+            if negated {
+                continue;
+            }
+
+            let grounded_args = match join::ground_head(args, &bm.subst) {
+                Some(v) => v,
+                None => continue,
+            };
+
+            let atom_key = AtomKey::new(pred_id, grounded_args);
+            let old_state = store.get_state(&atom_key)?;
+            let contribution = Contribution {
+                b: 0.0,
+                d: violation_d,
+                evidence_id: Some(make_constraint_evidence_id(
+                    constraint.id,
+                    goal_idx,
+                    &bm.subst,
+                )),
+            };
+
+            let new_state = store.upsert_atom(&atom_key, &contribution)?;
+            if !old_state.approx_eq(&new_state) {
+                changed += 1;
+            }
+        }
+    }
+
+    Ok(changed)
 }
 
 /// Create a deterministic evidence ID from a rule ID and substitution.
@@ -259,6 +363,23 @@ fn make_evidence_id(rule_id: u64, subst: &Subst) -> Vec<u8> {
     for (name, &val) in pairs {
         buf.extend_from_slice(name.as_bytes());
         buf.push(0); // separator
+        buf.extend_from_slice(&val.to_be_bytes());
+    }
+
+    buf
+}
+
+fn make_constraint_evidence_id(constraint_id: u64, goal_idx: usize, subst: &Subst) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&constraint_id.to_be_bytes());
+    buf.extend_from_slice(&(goal_idx as u64).to_be_bytes());
+
+    let mut pairs: Vec<_> = subst.iter().collect();
+    pairs.sort_by_key(|(k, _)| *k);
+
+    for (name, &val) in pairs {
+        buf.extend_from_slice(name.as_bytes());
+        buf.push(0);
         buf.extend_from_slice(&val.to_be_bytes());
     }
 

@@ -169,6 +169,7 @@ impl EngineSession {
         // 1. Load EDB facts
         let facts = self.edb.get_facts(branch, None)?;
         let rules = self.edb.get_rules(branch, None)?;
+        let constraints = self.edb.get_constraints(branch, None)?;
 
         // 2. Register predicates and load facts into IDB
         self.load_facts_into_idb(&facts)?;
@@ -178,10 +179,15 @@ impl EngineSession {
             compiler::compile_rules(&self.idb, &rules, &self.pred_configs)?;
         self.pred_map.extend(rule_pred_map);
 
+        let (compiled_constraints, constraint_pred_map) =
+            compiler::compile_constraints(&self.idb, &constraints, &self.pred_configs)?;
+        self.pred_map.extend(constraint_pred_map);
+
         // 4. Evaluate to fixpoint
         let result = eval::evaluate_to_fixpoint(
             &self.idb,
             &compiled_rules,
+            &compiled_constraints,
             &self.semantics,
             &self.pred_map,
             max_depth,

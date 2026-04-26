@@ -18,6 +18,14 @@ from doxa.core.belief_record import (
     BeliefRecord,
 )
 from doxa.core.branch import Branch
+from doxa.core.goal import (
+    AtomGoal,
+    BuiltinGoal,
+    EntityArg,
+    LiteralArg,
+    PredRefArg,
+    VarArg,
+)
 from doxa.core.rule import (
     Rule,
     RuleAtomGoal,
@@ -227,6 +235,34 @@ class NativeBranchRepository(BranchRepository):
         else:
             raise TypeError(f"Unknown goal type: {type(goal)}")
 
+    def _constraint_goal_arg_to_term(self, arg) -> object:
+        if isinstance(arg, VarArg):
+            return arg.var.name
+        elif isinstance(arg, EntityArg):
+            return self._store.intern(arg.ent_name)
+        elif isinstance(arg, LiteralArg):
+            return self._store.intern(arg.to_doxa())
+        elif isinstance(arg, PredRefArg):
+            return self._store.intern(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
+        else:
+            raise TypeError(f"Unknown constraint goal arg type: {type(arg)}")
+
+    def _constraint_goal_to_dict(self, goal) -> dict:
+        if isinstance(goal, AtomGoal):
+            return {
+                "pred_name": goal.pred_name,
+                "pred_arity": goal.pred_arity,
+                "negated": goal.negated,
+                "args": [self._constraint_goal_arg_to_term(a) for a in goal.goal_args],
+            }
+        elif isinstance(goal, BuiltinGoal):
+            return {
+                "builtin_name": goal.builtin_name.value,
+                "args": [self._constraint_goal_arg_to_term(a) for a in goal.goal_args],
+            }
+        else:
+            raise TypeError(f"Unknown constraint goal type: {type(goal)}")
+
     # ------------------------------------------------------------------
     # Core CRUD
     # ------------------------------------------------------------------
@@ -311,6 +347,16 @@ class NativeBranchRepository(BranchRepository):
                 body,
                 rule.b,
                 rule.d,
+            )
+
+        for i, constraint in enumerate(branch.constraints):
+            body = [self._constraint_goal_to_dict(g) for g in constraint.goals]
+            self._store.add_constraint(
+                name,
+                i,
+                body,
+                constraint.b,
+                constraint.d,
             )
 
         # Declare predicates

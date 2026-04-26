@@ -12,7 +12,12 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-use doxa_core::rule::{AtomGoal, BuiltinGoal, BuiltinOp, Goal, Rule as RustRule};
+use doxa_core::rule::{
+    AtomGoal, BuiltinGoal, BuiltinOp, Constraint as RustConstraint, Goal, Rule as RustRule,
+};
+use doxa_core::semantics::{
+    ConstraintApplicabilitySemantics, EpistemicSemantics, RuleApplicabilitySemantics,
+};
 use doxa_core::types::{AggregationMode, EvidenceMode, Term};
 use doxa_engine::EngineSession;
 
@@ -88,7 +93,39 @@ fn parse_builtin_op(name: &str) -> PyResult<BuiltinOp> {
         "mul" => Ok(BuiltinOp::Mul),
         "div" => Ok(BuiltinOp::Div),
         "between" => Ok(BuiltinOp::Between),
+        "int" => Ok(BuiltinOp::Int),
+        "string" => Ok(BuiltinOp::String),
+        "float" => Ok(BuiltinOp::Float),
+        "entity" => Ok(BuiltinOp::Entity),
+        "predicate_ref" => Ok(BuiltinOp::PredicateRef),
+        "date" => Ok(BuiltinOp::Date),
+        "datetime" => Ok(BuiltinOp::DateTime),
+        "duration" => Ok(BuiltinOp::Duration),
         _ => Err(PyValueError::new_err(format!("Unknown builtin: {name}"))),
+    }
+}
+
+fn parse_rule_applicability(name: &str) -> PyResult<RuleApplicabilitySemantics> {
+    match name {
+        "body_truth_only" => Ok(RuleApplicabilitySemantics::BodyTruthOnly),
+        "body_truth_discounted_by_body_falsity" => {
+            Ok(RuleApplicabilitySemantics::BodyTruthDiscountedByBodyFalsity)
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Unknown rule_applicability semantics: {name}"
+        ))),
+    }
+}
+
+fn parse_constraint_applicability(name: &str) -> PyResult<ConstraintApplicabilitySemantics> {
+    match name {
+        "body_truth_only" => Ok(ConstraintApplicabilitySemantics::BodyTruthOnly),
+        "body_truth_discounted_by_body_falsity" => {
+            Ok(ConstraintApplicabilitySemantics::BodyTruthDiscountedByBodyFalsity)
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Unknown constraint_applicability semantics: {name}"
+        ))),
     }
 }
 
@@ -228,6 +265,20 @@ impl NativeStore {
         Ok(())
     }
 
+    /// Set per-evaluation epistemic semantics knobs used by native materialization.
+    fn set_semantics(
+        &mut self,
+        rule_applicability: &str,
+        constraint_applicability: &str,
+    ) -> PyResult<()> {
+        let mut semantics: EpistemicSemantics = self.session.semantics.clone();
+        semantics.rule_applicability = parse_rule_applicability(rule_applicability)?;
+        semantics.constraint_applicability =
+            parse_constraint_applicability(constraint_applicability)?;
+        self.session.semantics = semantics;
+        Ok(())
+    }
+
     /// Assert a ground fact in the EDB. Returns the event ID.
     #[pyo3(signature = (branch, pred_name, pred_arity, args, b, d, source=None))]
     #[expect(
@@ -310,6 +361,33 @@ impl NativeStore {
         };
 
         self.session.edb.add_rule(branch, rule).map_err(to_py_err)
+    }
+
+    /// Add a constraint to the EDB. Returns the event ID.
+    fn add_constraint(
+        &self,
+        branch: &str,
+        constraint_id: u64,
+        body: &Bound<'_, PyList>,
+        b: f64,
+        d: f64,
+    ) -> PyResult<u64> {
+        let mut rust_goals = Vec::new();
+        for item in body.iter() {
+            rust_goals.push(py_to_goal(&item)?);
+        }
+
+        let constraint = RustConstraint {
+            id: constraint_id,
+            goals: rust_goals,
+            b,
+            d,
+        };
+
+        self.session
+            .edb
+            .add_constraint(branch, constraint)
+            .map_err(to_py_err)
     }
 
     /// Get all visible facts for a branch. Returns a list of dicts.

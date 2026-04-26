@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use doxa_core::rule::{CompiledGoal, CompiledRule, Goal, Rule};
+use doxa_core::rule::{CompiledConstraint, CompiledGoal, CompiledRule, Constraint, Goal, Rule};
 use doxa_core::types::{AggregationMode, EvidenceMode, IndexSpec, PredId};
 use doxa_idb::{DoxaStore, StoreError};
 
@@ -86,6 +86,49 @@ pub fn compile_rules(
             body,
             b: rule.b,
             d: rule.d,
+        });
+    }
+
+    Ok((compiled, pred_map))
+}
+
+/// Compile constraints against the IDB store, resolving predicate names to IDs.
+pub fn compile_constraints(
+    store: &DoxaStore,
+    constraints: &[Constraint],
+    pred_configs: &HashMap<String, PredConfig>,
+) -> Result<(Vec<CompiledConstraint>, HashMap<String, PredId>)> {
+    let mut pred_map: HashMap<String, PredId> = HashMap::new();
+    let mut compiled = Vec::with_capacity(constraints.len());
+
+    // First pass: ensure all atom-goal predicates are registered
+    for constraint in constraints {
+        for goal in &constraint.goals {
+            if let Goal::Atom(ag) = goal {
+                ensure_predicate(
+                    store,
+                    &ag.pred_name,
+                    ag.pred_arity,
+                    pred_configs,
+                    &mut pred_map,
+                )?;
+            }
+        }
+    }
+
+    // Second pass: compile constraints
+    for constraint in constraints {
+        let goals = constraint
+            .goals
+            .iter()
+            .map(|g| compile_goal(g, &pred_map))
+            .collect::<Result<Vec<_>>>()?;
+
+        compiled.push(CompiledConstraint {
+            id: constraint.id,
+            goals,
+            b: constraint.b,
+            d: constraint.d,
         });
     }
 

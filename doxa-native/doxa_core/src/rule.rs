@@ -38,6 +38,14 @@ pub enum BuiltinOp {
     Mul,
     Div,
     Between,
+    Int,
+    String,
+    Float,
+    Entity,
+    PredicateRef,
+    Date,
+    DateTime,
+    Duration,
 }
 
 /// A built-in goal: `op(t₁, t₂)`.
@@ -113,5 +121,14 @@ pub struct Constraint {
     /// Violation belief weight.
     pub b: f64,
     /// Violation doubt weight.
+    pub d: f64,
+}
+
+/// A compiled, ID-resolved version of a constraint.
+#[derive(Debug, Clone)]
+pub struct CompiledConstraint {
+    pub id: u64,
+    pub goals: Vec<CompiledGoal>,
+    pub b: f64,
     pub d: f64,
 }
