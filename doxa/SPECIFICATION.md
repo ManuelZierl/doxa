@@ -463,7 +463,6 @@ For textual queries, use the flat form, for example: `?- p(X) @{body_truth:"mini
 
 | Option                     | Supported values in the current model                      |
 | -------------------------- | ---------------------------------------------------------- |
-
 | `body_truth`               | `product`, `minimum`                                       |
 | `body_falsity`             | `noisy_or`, `maximum`                                      |
 | `rule_propagation`         | `body_times_rule_weights`                                  |
@@ -507,7 +506,7 @@ Interactive-mode only. Prefix is `/-`.
 | `/- info`                                        | Show session info: engine, backend, counts                     |
 | `/- schema [--branch] [--query] [--file <path>]` | Print JSON schema for Branch and/or Query                      |
 | `/- load <file> [--fix]`                         | Load and merge a `.doxa` or `.json` file                       |
-| `/- unload predicate <name>/<arity>`             | Remove a predicate and related facts and rules                 |
+| `/- unload predicate <name>/<arity>`             | Remove a predicate and related facts, rules, and constraints   |
 | `/- unload entity <name>`                        | Remove an entity and facts referencing it                      |
 | `/- unload rules`                                | Remove all rules                                               |
 | `/- unload constraints`                          | Remove all constraints                                         |
