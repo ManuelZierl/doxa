@@ -20,6 +20,7 @@ from doxa.core.epistemic_semantics import (
     BodyFalsitySemantics,
     BodyTruthSemantics,
     ConstraintApplicabilitySemantics,
+    ConstraintPropagationSemantics,
     EpistemicSemanticsCapabilities,
     NonAtomSemantics,
     RuleApplicabilitySemantics,
@@ -174,7 +175,9 @@ class NativeQueryEngine(QueryEngine):
                 body_truth=(BodyTruthSemantics.product,),
                 body_falsity=(BodyFalsitySemantics.noisy_or,),
                 rule_propagation=(RulePropagationSemantics.body_times_rule_weights,),
-                constraint_propagation=(),
+                constraint_propagation=(
+                    ConstraintPropagationSemantics.body_times_constraint_weights_to_violation,
+                ),
                 support_aggregation=(
                     SupportAggregationSemantics.noisy_or,
                     SupportAggregationSemantics.maximum,
@@ -777,12 +780,6 @@ class NativeQueryEngine(QueryEngine):
         effective_query_time = query.options.query_time or datetime.now(timezone.utc)
         effective_valid_at = query.options.valid_at or effective_query_time
         effective_known_at = query.options.known_at or effective_query_time
-
-        if branch.constraints:
-            raise NotImplementedError(
-                "NativeQueryEngine does not support constraints yet; "
-                "use the memory or postgres query engine for constrained branches."
-            )
 
         visible_records = []
         for record in branch.belief_records:

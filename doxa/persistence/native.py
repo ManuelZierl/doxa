@@ -220,12 +220,10 @@ class NativeBranchRepository(BranchRepository):
                 "args": [self._goal_arg_to_term(a) for a in goal.goal_args],
             }
         elif isinstance(goal, RuleBuiltinGoal):
-            # Builtins are not yet supported in the Rust engine;
-            # skip them for now and let the Python evaluator handle them.
-            raise NotImplementedError(
-                f"Builtin goals ({goal.builtin_name}) are not yet supported "
-                "by the native engine."
-            )
+            return {
+                "builtin_name": goal.builtin_name.value,
+                "args": [self._goal_arg_to_term(a) for a in goal.goal_args],
+            }
         else:
             raise TypeError(f"Unknown goal type: {type(goal)}")
 

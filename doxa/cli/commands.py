@@ -306,7 +306,6 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
         removed = len(b.predicates) - len(new_predicates)
         removed_brs = len(b.belief_records) - len(new_brs)
         removed_rules = len(b.rules) - len(new_rules)
-        removed_constraints = len(b.constraints) - len(new_constraints)
         state.branch = b.model_copy(
             update={
                 "predicates": new_predicates,
@@ -318,7 +317,7 @@ def cmd_unload(state: "TerminalState", args: list[str]) -> None:
         print(
             f"  Unloaded predicate {pred_name}/{arity}: "
             f"{removed} declaration(s), {removed_brs} fact(s), "
-            f"{removed_rules} rule(s), {removed_constraints} constraint(s) removed."
+            f"{removed_rules} rule(s) removed."
         )
 
     elif subcmd == "entity" and len(args) >= 2:
