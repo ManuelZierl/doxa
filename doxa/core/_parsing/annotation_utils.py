@@ -1,9 +1,24 @@
 """Shared utilities for annotation handling."""
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from doxa.core._parsing.annotation_parser import parse_ax_annotation
 
 if TYPE_CHECKING:
     from doxa.core.annotate_mixin import AnnotateMixin
+
+
+DEFAULT_ANNOTATION_VALUES: dict[str, object] = {
+    "b": 1.0,
+    "d": 0.0,
+    "src": None,
+    "et": None,
+    "vf": None,
+    "vt": None,
+    "name": None,
+    "description": None,
+}
 
 
 def is_default_annotation(obj: "AnnotateMixin") -> bool:
@@ -15,15 +30,8 @@ def is_default_annotation(obj: "AnnotateMixin") -> bool:
     Returns:
         True if all annotation fields are at their default values
     """
-    return (
-        obj.b == 1.0
-        and obj.d == 0.0
-        and obj.src is None
-        and obj.et is None
-        and obj.vf is None
-        and obj.vt is None
-        and obj.name is None
-        and obj.description is None
+    return all(
+        getattr(obj, key) == value for key, value in DEFAULT_ANNOTATION_VALUES.items()
     )
 
 
@@ -39,16 +47,13 @@ def extract_annotation_kwargs(annotation_str: str | None) -> dict[str, object]:
     if not annotation_str:
         return {}
 
-    from doxa.core.annotate_mixin import AnnotateMixin
-
-    ann = AnnotateMixin.from_doxa_annotation(annotation_str)
-    return {
-        "b": ann.b,
-        "d": ann.d,
-        "src": ann.src,
-        "et": ann.et,
-        "vf": ann.vf,
-        "vt": ann.vt,
-        "name": ann.name,
-        "description": ann.description,
+    ann = parse_ax_annotation(annotation_str)
+    out: dict[str, object] = {
+        "b": ann.get("b", DEFAULT_ANNOTATION_VALUES["b"]),
+        "d": ann.get("d", DEFAULT_ANNOTATION_VALUES["d"]),
+        "et": ann.get("et", datetime.now(timezone.utc)),
     }
+    for key in ("src", "vf", "vt", "name", "description"):
+        if key in ann:
+            out[key] = ann[key]
+    return out

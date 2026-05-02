@@ -61,10 +61,40 @@ def _collect_fixtures() -> list[tuple[str, Path]]:
     return results
 
 
+_ENGINES = ["memory", "native"]
+
+# Fixture categories that require features not yet implemented in the
+# native Rust engine.  These are marked as expected failures (xfail) so
+# the test suite stays green while documenting the gap.
+_NATIVE_XFAIL_CATEGORIES: set[str] = set()
+_NATIVE_XFAIL_FIXTURES: set[str] = set()
+
+
+def _has_native_engine() -> bool:
+    """Return True when the doxa._native extension is importable."""
+    try:
+        from doxa import _native  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+@pytest.mark.parametrize("engine", _ENGINES)
 @pytest.mark.parametrize(
     "name,fixture_dir", _collect_fixtures(), ids=[n for n, _ in _collect_fixtures()]
 )
-def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
+def test_fixture(
+    name: str, fixture_dir: Path, engine: str, monkeypatch, capsys
+) -> None:
+    if engine == "native" and not _has_native_engine():
+        pytest.skip("doxa_native not installed — run maturin develop")
+
+    if engine == "native":
+        category = name.split("/")[0]
+        if category in _NATIVE_XFAIL_CATEGORIES or name in _NATIVE_XFAIL_FIXTURES:
+            pytest.xfail(f"Native engine does not yet support {category} features")
+
     # utf-8-sig strips the UTF-8 BOM (0xEF 0xBB 0xBF) if present, so both
     # BOM and non-BOM files are handled transparently.
     input_text = (fixture_dir / "input.doxa").read_text(encoding="utf-8-sig")
@@ -73,8 +103,13 @@ def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
     # Mock stdin with the input text
     monkeypatch.setattr("sys.stdin", StringIO(input_text))
 
-    # Mock sys.argv to pass --tmp flag
-    monkeypatch.setattr("sys.argv", ["doxa", "--tmp"])
+    # Mock sys.argv — use --memory/--engine for native, --tmp for memory
+    if engine == "native":
+        monkeypatch.setattr(
+            "sys.argv", ["doxa", "--memory", "native", "--engine", "native"]
+        )
+    else:
+        monkeypatch.setattr("sys.argv", ["doxa", "--tmp"])
 
     # Run the CLI main function
     try:
@@ -89,5 +124,6 @@ def test_fixture(name: str, fixture_dir: Path, monkeypatch, capsys) -> None:
     expected = _normalise(expected_raw)
 
     assert actual == expected, (
-        f"\n--- fixture: {name} ---\nEXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
+        f"\n--- fixture: {name} [engine={engine}] ---\n"
+        f"EXPECTED:\n{expected}\n\nACTUAL:\n{actual}\n"
     )

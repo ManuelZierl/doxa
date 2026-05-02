@@ -4,20 +4,29 @@ from typing import Annotated, List, Literal, Union
 
 from pydantic import Field, model_validator
 
+from doxa.core._parsing.literal_value import (
+    parse_literal_value,
+    render_literal_value,
+    validate_literal_value,
+)
 from doxa.core._parsing.parsing_utils import (
     get_float_regex,
     get_goal_call_regex,
     get_int_regex,
     get_pred_ref_regex,
-    parse_python_string_literal,
     split_top_level,
 )
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
 from doxa.core.builtins import BUILTIN_ARITY, Builtin
-from doxa.core.entity import Entity
 from doxa.core.goal_kinds import GoalKind
 from doxa.core.literal_type import LiteralType
+from doxa.core.term_args import (
+    parse_entity_name,
+    parse_pred_ref,
+    parse_with_fallback,
+    render_pred_ref,
+)
 from doxa.core.var import Var
 
 _GOAL_CALL_RE = get_goal_call_regex()
@@ -62,15 +71,16 @@ def goal_from_doxa(inp: str) -> "Goal":
 
 
 def goal_arg_from_doxa(inp: str) -> "GoalArg":
-    last_error: ValueError | None = None
-
-    for cls in (LiteralArg, PredRefArg, VarArg, EntityArg):
-        try:
-            return cls.from_doxa(inp)
-        except ValueError as exc:
-            last_error = exc
-
-    raise ValueError(f"Invalid goal argument: {inp!r}") from last_error
+    return parse_with_fallback(
+        inp,
+        (
+            LiteralArg.from_doxa,
+            PredRefArg.from_doxa,
+            VarArg.from_doxa,
+            EntityArg.from_doxa,
+        ),
+        invalid_message=f"Invalid goal argument: {inp!r}",
+    )
 
 
 class GoalBase(Base):
@@ -275,12 +285,11 @@ class EntityArg(Base):
 
     @classmethod
     def from_doxa(cls, inp: str) -> "EntityArg":
-        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.goal_arg,
             pos=0,
             term_kind="ent",
-            ent_name=ent.name,
+            ent_name=parse_entity_name(inp),
         )
 
 
@@ -289,59 +298,33 @@ class LiteralArg(Base):
     pos: int = Field(..., ge=0, description="Argument position in goal (0-based).")
     term_kind: Literal["lit"] = Field(...)
     lit_type: LiteralType = Field(..., description="Literal type tag.")
-    value: str | int | float = Field(..., description="Literal value.")
+    value: object = Field(..., description="Literal value.")
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "LiteralArg":
-        if self.lit_type == LiteralType.str and not isinstance(self.value, str):
-            raise ValueError("Literal with lit_type='str' must use a string value.")
-        if self.lit_type == LiteralType.int and type(self.value) is not int:
-            raise ValueError("Literal with lit_type='int' must use an int value.")
-        if self.lit_type == LiteralType.float and type(self.value) is not float:
-            raise ValueError("Literal with lit_type='float' must use a float value.")
+        try:
+            validate_literal_value(self.lit_type, self.value)
+        except ValueError as exc:
+            raise ValueError(f"LiteralArg {exc}") from exc
         return self
 
     def to_doxa(self) -> str:
-        if self.lit_type == LiteralType.str:
-            return f'"{self.value}"'
-        if self.lit_type == LiteralType.int:
-            return str(self.value)
-        if self.lit_type == LiteralType.float:
-            return str(self.value)
-        raise ValueError(f"Unsupported literal type: {self.lit_type}")
+        return render_literal_value(self.lit_type, self.value, escape_strings=False)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "LiteralArg":
-        s = inp.strip()
-
-        if s.startswith('"') and s.endswith('"'):
-            return cls(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="lit",
-                lit_type=LiteralType.str,
-                value=parse_python_string_literal(s),
-            )
-
-        if _INT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="lit",
-                lit_type=LiteralType.int,
-                value=int(s),
-            )
-
-        if _FLOAT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.goal_arg,
-                pos=0,
-                term_kind="lit",
-                lit_type=LiteralType.float,
-                value=float(s),
-            )
-
-        raise ValueError(f"Invalid literal argument: {inp!r}")
+        lit_type, value = parse_literal_value(
+            inp, error_prefix="Invalid literal argument"
+        )
+        return cls(
+            kind=BaseKind.goal_arg,
+            pos=0,
+            term_kind="lit",
+            lit_type=lit_type,
+            value=value,
+        )
 
 
 class PredRefArg(Base):
@@ -352,20 +335,21 @@ class PredRefArg(Base):
     pred_ref_arity: int = Field(..., ge=0, description="Referenced predicate arity.")
 
     def to_doxa(self) -> str:
-        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+        return render_pred_ref(self.pred_ref_name, self.pred_ref_arity)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "PredRefArg":
-        s = inp.strip()
-        if not _PRED_REF_RE.fullmatch(s):
-            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
-        name, arity_str = s.rsplit("/", 1)
+        name, arity = parse_pred_ref(
+            inp,
+            _PRED_REF_RE,
+            error_prefix="Invalid predicate reference argument",
+        )
         return cls(
             kind=BaseKind.goal_arg,
             pos=0,
             term_kind="pred_ref",
             pred_ref_name=name,
-            pred_ref_arity=int(arity_str),
+            pred_ref_arity=arity,
         )
 
 

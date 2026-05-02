@@ -1,0 +1,7 @@
+doxa>   1: R=d"2024-01-31" | b=1, d=0, status=true
+doxa>   1: R=dur"P30D" | b=1, d=0, status=true
+doxa>   1: R=d"2024-06-05" | b=1, d=0, status=true
+doxa>   1: R=dur"P3D" | b=1, d=0, status=true
+doxa>   1: R=dt"2024-01-01T01:00:00Z" | b=1, d=0, status=true
+doxa>   1: R=dur"PT1H" | b=1, d=0, status=true
+doxa>   Goodbye.

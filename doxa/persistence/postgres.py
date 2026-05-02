@@ -16,9 +16,10 @@ Two tables are created automatically on first use:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
+from doxa.core._parsing.parsing_utils import parse_iso_duration
 from doxa.core.belief_record import BeliefRecord
 from doxa.core.branch import Branch
 from doxa.persistence.repository import BranchRepository
@@ -80,6 +81,33 @@ def _branch_without_beliefs(branch: Branch) -> dict:
     return data
 
 
+def _restore_temporal_belief_arg(arg_data: dict) -> dict:
+    if arg_data.get("term_kind") != "lit":
+        return arg_data
+
+    lit_type = arg_data.get("lit_type")
+    value = arg_data.get("value")
+    if not isinstance(value, str):
+        return arg_data
+
+    restored = dict(arg_data)
+    if lit_type == "date":
+        restored["value"] = date.fromisoformat(value)
+    elif lit_type == "datetime":
+        restored["value"] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    elif lit_type == "duration":
+        restored["value"] = parse_iso_duration(value)
+    return restored
+
+
+def _restore_belief_record_data(record_data: dict) -> dict:
+    restored = dict(record_data)
+    restored["args"] = [
+        _restore_temporal_belief_arg(arg) for arg in record_data.get("args", [])
+    ]
+    return restored
+
+
 # ---------------------------------------------------------------------------
 # Repository
 # ---------------------------------------------------------------------------
@@ -133,6 +161,11 @@ class PostgresBranchRepository(BranchRepository):
         if not self._conn.autocommit:
             self._conn.commit()
 
+    def _branch_exists(self, name: str) -> bool:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM doxa_branches WHERE name = %s", (name,))
+            return cur.fetchone() is not None
+
     # -- core CRUD ----------------------------------------------------------
 
     def get(self, name: str) -> Optional[Branch]:
@@ -145,65 +178,65 @@ class PostgresBranchRepository(BranchRepository):
 
             # Attach belief records
             cur.execute(
-                "SELECT data FROM doxa_belief_records WHERE branch_name = %s",
+                "SELECT data FROM doxa_belief_records WHERE branch_name = %s ORDER BY id",
                 (name,),
             )
             belief_rows = cur.fetchall()
-            branch_data["belief_records"] = [r[0] for r in belief_rows]
+            branch_data["belief_records"] = [
+                _restore_belief_record_data(r[0]) for r in belief_rows
+            ]
 
         return Branch.model_validate(branch_data)
 
     def save(self, branch: Branch) -> None:
         data = _branch_without_beliefs(branch)
 
-        with self._conn.cursor() as cur:
-            # Upsert branch metadata
-            cur.execute(
-                """
-                INSERT INTO doxa_branches (name, data)
-                VALUES (%s, %s::jsonb)
-                ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data
-                """,
-                (branch.name, Branch.model_validate(data).model_dump_json()),
-            )
-
-            # Replace all belief records for this branch
-            cur.execute(
-                "DELETE FROM doxa_belief_records WHERE branch_name = %s",
-                (branch.name,),
-            )
-
-            if branch.belief_records:
-                from psycopg.types.json import Jsonb
-
-                args = []
-                for rec in branch.belief_records:
-                    rec_data = rec.model_dump(mode="json")
-                    args.append(
-                        (
-                            branch.name,
-                            rec.pred_name,
-                            rec.pred_arity,
-                            _utc(rec.et),
-                            _utc(rec.vf) if rec.vf is not None else None,
-                            _utc(rec.vt) if rec.vt is not None else None,
-                            rec.b,
-                            rec.d,
-                            Jsonb(rec_data),
-                        )
-                    )
-
-                cur.executemany(
+        with self._conn.transaction():
+            with self._conn.cursor() as cur:
+                # Upsert branch metadata
+                cur.execute(
                     """
-                    INSERT INTO doxa_belief_records
-                        (branch_name, pred_name, pred_arity, et, vf, vt, b, d, data)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO doxa_branches (name, data)
+                    VALUES (%s, %s::jsonb)
+                    ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data
                     """,
-                    args,
+                    (branch.name, Branch.model_validate(data).model_dump_json()),
                 )
 
-        if not self._conn.autocommit:
-            self._conn.commit()
+                # Replace all belief records for this branch
+                cur.execute(
+                    "DELETE FROM doxa_belief_records WHERE branch_name = %s",
+                    (branch.name,),
+                )
+
+                if branch.belief_records:
+                    from psycopg.types.json import Jsonb
+
+                    args = []
+                    for rec in branch.belief_records:
+                        rec_data = rec.model_dump(mode="json")
+                        args.append(
+                            (
+                                branch.name,
+                                rec.pred_name,
+                                rec.pred_arity,
+                                _utc(rec.et),
+                                _utc(rec.vf) if rec.vf is not None else None,
+                                _utc(rec.vt) if rec.vt is not None else None,
+                                rec.b,
+                                rec.d,
+                                Jsonb(rec_data),
+                            )
+                        )
+
+                    cur.executemany(
+                        """
+                        INSERT INTO doxa_belief_records
+                            (branch_name, pred_name, pred_arity, et, vf, vt, b, d, data)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        args,
+                    )
 
     def delete(self, name: str) -> None:
         with self._conn.cursor() as cur:
@@ -225,6 +258,9 @@ class PostgresBranchRepository(BranchRepository):
         *,
         pred_name: Optional[str] = None,
     ) -> List[BeliefRecord]:
+        if not self._branch_exists(branch_name):
+            raise KeyError(f"Branch not found: {branch_name!r}")
+
         clauses = ["branch_name = %s"]
         params: list = [branch_name]
 
@@ -232,10 +268,17 @@ class PostgresBranchRepository(BranchRepository):
             clauses.append("pred_name = %s")
             params.append(pred_name)
 
-        sql = "SELECT data FROM doxa_belief_records WHERE " + " AND ".join(clauses)
+        sql = (
+            "SELECT data FROM doxa_belief_records WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY id"
+        )
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
-            return [BeliefRecord.model_validate(row[0]) for row in cur.fetchall()]
+            return [
+                BeliefRecord.model_validate(_restore_belief_record_data(row[0]))
+                for row in cur.fetchall()
+            ]
 
     def get_visible_belief_records(
         self,
@@ -251,6 +294,12 @@ class PostgresBranchRepository(BranchRepository):
         This is the fast path used by ``PostgresQueryEngine`` to push temporal
         filtering down to the database instead of loading all records.
         """
+        if not self._branch_exists(branch_name):
+            raise KeyError(f"Branch not found: {branch_name!r}")
+
+        valid_at = _utc(valid_at)
+        known_at = _utc(known_at)
+
         clauses = [
             "branch_name = %s",
             "et <= %s",  # knowledge-time cutoff
@@ -267,13 +316,23 @@ class PostgresBranchRepository(BranchRepository):
             clauses.append("pred_arity = %s")
             params.append(pred_arity)
 
-        sql = "SELECT data FROM doxa_belief_records WHERE " + " AND ".join(clauses)
+        sql = (
+            "SELECT data FROM doxa_belief_records WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY id"
+        )
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
-            return [BeliefRecord.model_validate(row[0]) for row in cur.fetchall()]
+            return [
+                BeliefRecord.model_validate(_restore_belief_record_data(row[0]))
+                for row in cur.fetchall()
+            ]
 
     def add_belief_record(self, branch_name: str, record: BeliefRecord) -> None:
         from psycopg.types.json import Jsonb
+
+        if not self._branch_exists(branch_name):
+            raise KeyError(f"Branch not found: {branch_name!r}")
 
         with self._conn.cursor() as cur:
             cur.execute(
@@ -309,6 +368,10 @@ class PostgresBranchRepository(BranchRepository):
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+    def get_connection(self):
+        """Return the underlying psycopg connection for advanced query paths."""
+        return self._conn
 
 
 # ---------------------------------------------------------------------------

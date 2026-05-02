@@ -1,4 +1,4 @@
-"""Query evaluation layer – swappable engines for evaluating AX queries."""
+"""Query evaluation layer - swappable engines for evaluating Doxa queries."""
 
 from doxa.query.engine import QueryEngine, QueryResult
 
@@ -10,4 +10,8 @@ def __getattr__(name: str):
         from doxa.query.postgres import PostgresQueryEngine
 
         return PostgresQueryEngine
+    if name == "NativeQueryEngine":
+        from doxa.query.native import NativeQueryEngine
+
+        return NativeQueryEngine
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

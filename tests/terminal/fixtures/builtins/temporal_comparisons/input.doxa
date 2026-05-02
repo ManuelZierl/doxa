@@ -1,0 +1,6 @@
+event(meeting, d"2024-06-15").
+event(launch, d"2024-12-01").
+event(deadline, d"2024-03-01").
+?- event(X, D), lt(D, d"2024-07-01").
+?- event(X, D), geq(D, d"2024-06-15").
+/- exit

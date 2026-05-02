@@ -4,12 +4,32 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
-from doxa.cli.commands import _load_file, dispatch
+from doxa.cli.commands import dispatch
+from doxa.cli.io import load_branch_file
+from doxa.core._parsing.parsing_utils import (
+    render_date_literal,
+    render_datetime_literal,
+    render_duration_literal,
+)
 from doxa.core.branch import Branch
 from doxa.persistence.repository import BranchRepository
 from doxa.query.engine import QueryEngine, QueryResult
+
+
+def _format_binding_value(v: Any) -> str:
+    """Format a binding value for terminal display using canonical Doxa syntax."""
+    if isinstance(v, datetime):
+        return render_datetime_literal(v)
+    if isinstance(v, date):
+        return render_date_literal(v)
+    if isinstance(v, timedelta):
+        return render_duration_literal(v)
+    return repr(v)
+
 
 # Try to enable readline history/completion
 try:
@@ -37,6 +57,13 @@ class TerminalState:
     engine: QueryEngine
     memory_kind: str
     engine_kind: str
+    ephemeral: bool = False
+
+
+def _persist_branch(state: TerminalState) -> None:
+    if state.ephemeral:
+        return
+    state.repo.save(state.branch)
 
 
 def _make_empty_branch() -> Branch:
@@ -118,7 +145,10 @@ def _run_query(state: TerminalState, text: str) -> None:
             parts = []
             if answer.bindings:
                 parts.append(
-                    ", ".join(f"{k}={v!r}" for k, v in answer.bindings.items())
+                    ", ".join(
+                        f"{k}={_format_binding_value(v)}"
+                        for k, v in answer.bindings.items()
+                    )
                 )
             parts.append(
                 f"b={answer.b:.4g}, d={answer.d:.4g}, status={answer.belnap_status.value}"
@@ -156,6 +186,11 @@ def _add_to_branch(state: TerminalState, text: str) -> None:
         print(f"  Merge error: {exc}")
         return
 
+    try:
+        _persist_branch(state)
+    except Exception as exc:
+        print(f"  Warning: could not persist branch: {exc}")
+
     counts = []
     if new_branch.predicates:
         counts.append(f"{len(new_branch.predicates)} predicate(s)")
@@ -192,10 +227,18 @@ def run_terminal(
 
     branch = _make_empty_branch()
 
+    if not ephemeral:
+        try:
+            existing = repo.get("main")
+            if existing is not None:
+                branch = existing
+        except Exception as exc:
+            print(f"  Warning: could not load persisted branch: {exc}", file=sys.stderr)
+
     # Pre-load files
     for path in preload_files:
         try:
-            loaded = _load_file(path)
+            loaded = load_branch_file(path)
             branch = branch.merge(loaded)
             print(
                 f"  Loaded {path}  "
@@ -212,7 +255,16 @@ def run_terminal(
         engine=engine,
         memory_kind=memory_kind,
         engine_kind=engine_kind,
+        ephemeral=ephemeral,
     )
+
+    if preload_files and not ephemeral:
+        try:
+            _persist_branch(state)
+        except Exception as exc:
+            print(
+                f"  Warning: could not persist preloaded branch: {exc}", file=sys.stderr
+            )
 
     print(BANNER)
 

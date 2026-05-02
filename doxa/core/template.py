@@ -8,7 +8,16 @@ predicate declarations).
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Protocol, Union, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Union,
+    runtime_checkable,
+)
 
 from doxa.core._parsing.annotation_parser import parse_ax_annotation
 from doxa.core._parsing.parsing_utils import (
@@ -17,16 +26,21 @@ from doxa.core._parsing.parsing_utils import (
     split_annotation_suffix,
     split_top_level,
 )
-from doxa.core.belief_record import BeliefRecord
-from doxa.core.constraint import Constraint
-from doxa.core.predicate import Predicate
-from doxa.core.rule import Rule
+
+if TYPE_CHECKING:
+    from doxa.core.belief_record import BeliefRecord
+    from doxa.core.constraint import Constraint
+    from doxa.core.predicate import Predicate
+    from doxa.core.rule import Rule
 
 # ---------------------------------------------------------------------------
 # DoxaStatement – union of all statement types a template may emit
 # ---------------------------------------------------------------------------
 
-DoxaStatement = Union[Predicate, BeliefRecord, Rule, Constraint]
+if TYPE_CHECKING:
+    DoxaStatement = Union["Predicate", "BeliefRecord", "Rule", "Constraint"]
+else:
+    DoxaStatement = Any
 
 # ---------------------------------------------------------------------------
 # Template argument types

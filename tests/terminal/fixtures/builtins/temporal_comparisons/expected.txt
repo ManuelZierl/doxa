@@ -1,0 +1,8 @@
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   Added: 1 predicate(s), 1 fact(s)
+doxa>   1: D=d"2024-06-15", X='meeting' | b=1, d=0, status=true
+  2: D=d"2024-03-01", X='deadline' | b=1, d=0, status=true
+doxa>   1: D=d"2024-06-15", X='meeting' | b=1, d=0, status=true
+  2: D=d"2024-12-01", X='launch' | b=1, d=0, status=true
+doxa>   Goodbye.

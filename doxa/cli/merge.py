@@ -6,7 +6,8 @@ from pathlib import Path
 
 import click
 
-from doxa.cli.commands import _load_file
+from doxa.cli.io import BranchLoadError, load_branch_file
+from doxa.cli.serialization import branch_to_doxa
 
 
 @click.command()
@@ -56,7 +57,7 @@ def merge_command(
     merged_branch = None
     for file_path in files:
         try:
-            branch = _load_file(file_path, fix_missing_kinds=fix)
+            branch = load_branch_file(file_path, fix_missing_kinds=fix)
             if merged_branch is None:
                 merged_branch = branch
             else:
@@ -64,7 +65,7 @@ def merge_command(
             click.echo(
                 f"Loaded {file_path} ({len(branch.belief_records)} facts, {len(branch.rules)} rules, {len(branch.constraints)} constraints)"
             )
-        except Exception as exc:
+        except BranchLoadError as exc:
             raise click.ClickException(f"Error loading {file_path}: {exc}")
 
     if merged_branch is None:
@@ -81,17 +82,7 @@ def merge_command(
     if output_format.lower() == "json":
         content = merged_branch.model_dump_json(indent=2, exclude_none=True)
     else:
-        # Convert to .doxa format
-        lines: list[str] = []
-        for p in merged_branch.predicates:
-            lines.append(f"{p.to_doxa()}.")
-        for r in merged_branch.belief_records:
-            lines.append(f"{r.to_doxa()}.")
-        for r in merged_branch.rules:
-            lines.append(f"{r.to_doxa()}.")
-        for c in merged_branch.constraints:
-            lines.append(f"{c.to_doxa()}.")
-        content = "\n".join(lines)
+        content = branch_to_doxa(merged_branch)
 
     # Write output
     if output is None:

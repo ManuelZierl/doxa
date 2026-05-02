@@ -680,3 +680,15 @@ def test_bare_edb_goal_without_assume_does_not_inject():
 
     # Without assume(...), bare EDB goals against an empty KB yield no results.
     assert result.answers == ()
+
+
+def test_query_with_pred_ref_fact():
+    """Query evaluation should not raise TypeError on pred_ref args (issue: _term missing pred_ref_name branch)."""
+    result = run(
+        "registry(parent/2).",
+        "?- registry(X)",
+    )
+
+    answer = assert_single_answer(result)
+    assert answer.bindings == {"X": "parent/2"}
+    assert answer.b == pytest.approx(1.0)

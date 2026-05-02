@@ -19,6 +19,9 @@ class Builtin(str, Enum):
     float = "float"
     entity = "entity"
     predicate_ref = "predicate_ref"
+    date = "date"
+    datetime = "datetime"
+    duration = "duration"
 
 
 # Expected argument count per builtin.
@@ -40,4 +43,7 @@ BUILTIN_ARITY: Dict[Builtin, int] = {
     Builtin.float: 1,
     Builtin.entity: 1,
     Builtin.predicate_ref: 1,
+    Builtin.date: 1,
+    Builtin.datetime: 1,
+    Builtin.duration: 1,
 }

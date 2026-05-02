@@ -4,10 +4,7 @@ import pytest
 
 from doxa.core import Branch
 from doxa.core.base_kinds import BaseKind
-from doxa.core.belief_record import (
-    BeliefPredRefArg,
-    belief_arg_from_doxa,
-)
+from doxa.core.belief_record import BeliefPredRefArg, belief_arg_from_doxa
 from doxa.core.goal import PredRefArg, goal_arg_from_doxa
 from doxa.core.rule import (
     RuleGoalPredRefArg,
@@ -16,7 +13,6 @@ from doxa.core.rule import (
     rule_head_arg_from_doxa,
 )
 from doxa.core.term_kinds import TermKind
-
 
 # ── BeliefPredRefArg parsing ────────────────────────────────────────────────
 

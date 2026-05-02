@@ -1,14 +1,14 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "doxa"
-version = "0.0.1"
+version = "0.1.0"
 description = "A epistemic logic-programming knowledge base toolkit."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [
     { name = "Manuel Zierl", email = "manuel.zierl@web.de" }
 ]
@@ -25,6 +25,8 @@ postgres = [
     "psycopg[binary]>=3.1",
 ]
 dev = [
+    "isort",
+    "pre-commit",
     "pytest>=8.0",
     "ruff",
     "testcontainers[postgres]>=4.0",
@@ -35,11 +37,18 @@ Homepage = "https://github.com/ManuelZierl/doxa"
 Source = "https://github.com/ManuelZierl/doxa"
 Issues = "https://github.com/ManuelZierl/doxa/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["doxa"]
+[tool.maturin]
+manifest-path = "doxa-native/doxa_py/Cargo.toml"
+module-name = "doxa._native"
+python-source = "."
+python-packages = ["doxa"]
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py311"
+
+[tool.isort]
+profile = "black"

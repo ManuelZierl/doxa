@@ -10,11 +10,13 @@ from doxa.core._parsing.annotation_utils import (
     extract_annotation_kwargs,
     is_default_annotation,
 )
+from doxa.core._parsing.literal_value import (
+    parse_literal_value,
+    render_literal_value,
+    validate_literal_value,
+)
 from doxa.core._parsing.parsing_utils import (
-    get_float_regex,
-    get_int_regex,
     get_pred_ref_regex,
-    parse_python_string_literal,
     split_annotation_suffix,
     split_top_level,
 )
@@ -22,25 +24,28 @@ from doxa.core.annotate_mixin import AnnotateMixin
 from doxa.core.audit_mixin import AuditMixin
 from doxa.core.base import Base
 from doxa.core.base_kinds import BaseKind
-from doxa.core.entity import Entity
 from doxa.core.literal_type import LiteralType
+from doxa.core.term_args import (
+    parse_entity_name,
+    parse_pred_ref,
+    parse_with_fallback,
+    render_pred_ref,
+)
 from doxa.core.term_kinds import TermKind
 
-_INT_RE = get_int_regex()
-_FLOAT_RE = get_float_regex()
 _PRED_REF_RE = get_pred_ref_regex()
 
 
 def belief_arg_from_doxa(inp: str) -> BeliefArg:
-    last_error: ValueError | None = None
-
-    for cls in (BeliefLiteralArg, BeliefPredRefArg, BeliefEntityArg):
-        try:
-            return cls.from_doxa(inp)
-        except ValueError as exc:
-            last_error = exc
-
-    raise ValueError(f"Invalid belief argument: {inp!r}") from last_error
+    return parse_with_fallback(
+        inp,
+        (
+            BeliefLiteralArg.from_doxa,
+            BeliefPredRefArg.from_doxa,
+            BeliefEntityArg.from_doxa,
+        ),
+        invalid_message=f"Invalid belief argument: {inp!r}",
+    )
 
 
 class BeliefEntityArg(Base):
@@ -56,11 +61,10 @@ class BeliefEntityArg(Base):
 
     @classmethod
     def from_doxa(cls, inp: str) -> "BeliefEntityArg":
-        ent = Entity.from_doxa(inp)
         return cls(
             kind=BaseKind.belief_arg,
             term_kind=TermKind.ent,
-            ent_name=ent.name,
+            ent_name=parse_entity_name(inp),
         )
 
 
@@ -71,64 +75,35 @@ class BeliefLiteralArg(Base):
         ...,
         description="Literal type tag.",
     )
-    value: str | int | float = Field(
+    value: object = Field(
         ...,
         description="Literal value.",
     )
 
+    model_config = {"arbitrary_types_allowed": True}
+
     def to_doxa(self) -> str:
-        if self.lit_type == LiteralType.str:
-            return f'"{self.value}"'
-        if self.lit_type == LiteralType.int:
-            return str(self.value)
-        if self.lit_type == LiteralType.float:
-            return str(self.value)
-        raise ValueError(f"Unsupported literal type: {self.lit_type}")
+        return render_literal_value(self.lit_type, self.value, escape_strings=False)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "BeliefLiteralArg":
-        s = inp.strip()
-
-        if s.startswith('"') and s.endswith('"'):
-            return cls(
-                kind=BaseKind.belief_arg,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.str,
-                value=parse_python_string_literal(s),
-            )
-
-        if _INT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.belief_arg,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.int,
-                value=int(s),
-            )
-
-        if _FLOAT_RE.fullmatch(s):
-            return cls(
-                kind=BaseKind.belief_arg,
-                term_kind=TermKind.lit,
-                lit_type=LiteralType.float,
-                value=float(s),
-            )
-
-        raise ValueError(f"Invalid belief literal argument: {inp!r}")
+        lit_type, value = parse_literal_value(
+            inp,
+            error_prefix="Invalid belief literal argument",
+        )
+        return cls(
+            kind=BaseKind.belief_arg,
+            term_kind=TermKind.lit,
+            lit_type=lit_type,
+            value=value,
+        )
 
     @model_validator(mode="after")
     def validate_value_matches_type(self) -> "BeliefLiteralArg":
-        if self.lit_type == LiteralType.str and not isinstance(self.value, str):
-            raise ValueError(
-                "BeliefLiteralArg with lit_type='str' must use a string value."
-            )
-        if self.lit_type == LiteralType.int and type(self.value) is not int:
-            raise ValueError(
-                "BeliefLiteralArg with lit_type='int' must use an int value."
-            )
-        if self.lit_type == LiteralType.float and type(self.value) is not float:
-            raise ValueError(
-                "BeliefLiteralArg with lit_type='float' must use a float value."
-            )
+        try:
+            validate_literal_value(self.lit_type, self.value)
+        except ValueError as exc:
+            raise ValueError(f"BeliefLiteralArg {exc}") from exc
         return self
 
 
@@ -146,19 +121,20 @@ class BeliefPredRefArg(Base):
     )
 
     def to_doxa(self) -> str:
-        return f"{self.pred_ref_name}/{self.pred_ref_arity}"
+        return render_pred_ref(self.pred_ref_name, self.pred_ref_arity)
 
     @classmethod
     def from_doxa(cls, inp: str) -> "BeliefPredRefArg":
-        s = inp.strip()
-        if not _PRED_REF_RE.fullmatch(s):
-            raise ValueError(f"Invalid predicate reference argument: {inp!r}")
-        name, arity_str = s.rsplit("/", 1)
+        name, arity = parse_pred_ref(
+            inp,
+            _PRED_REF_RE,
+            error_prefix="Invalid predicate reference argument",
+        )
         return cls(
             kind=BaseKind.belief_arg,
             term_kind=TermKind.pred_ref,
             pred_ref_name=name,
-            pred_ref_arity=int(arity_str),
+            pred_ref_arity=arity,
         )
 
 

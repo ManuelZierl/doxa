@@ -11,9 +11,11 @@ Authority: SCHEMA > this prompt > KB.
 
 {{SPEC_JSON_SCHEMA}}
 
+{{KB_SECTION_START}}
 ## KB (reuse-first)
 
 {{KB_JSON}}
+{{KB_SECTION_END}}
 
 ## RESOURCE
 
