@@ -24,6 +24,7 @@ Usage::
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import TYPE_CHECKING
 
 from doxa.core.branch import Branch
@@ -59,6 +60,10 @@ from doxa.query.evaluator import (
 )
 
 
+class PostgresNativeFallbackError(RuntimeError):
+    """Raised when strict native SQL mode forbids Python evaluator fallback."""
+
+
 class PostgresQueryEngine(QueryEngine):
     """Epistemic query engine backed by a PostgreSQL repository.
 
@@ -72,6 +77,14 @@ class PostgresQueryEngine(QueryEngine):
     repo:
         A :class:`~doxa.persistence.postgres.PostgresBranchRepository`
         used to fetch belief records with server-side filtering.
+    native_sql_enabled:
+        Enable the native SQL evaluator for the supported fragment. When it is
+        disabled or unsupported, the engine normally falls back to the shared
+        Python evaluator.
+    native_sql_strict:
+        Forbid fallback when native SQL is enabled. This is intended for tests
+        and native acceptance checks so unsupported constructs are visible
+        instead of being silently handled by the Python evaluator.
     """
 
     def __init__(
@@ -79,20 +92,33 @@ class PostgresQueryEngine(QueryEngine):
         repo: "PostgresBranchRepository",
         *,
         native_sql_enabled: bool | None = None,
+        native_sql_strict: bool | None = None,
         auto_sync_on_evaluate: bool = True,
     ) -> None:
         self._repo = repo
         self._synced_branch_signatures: dict[str, str] = {}
         self._native_sql_enabled = native_sql_enabled
+        self._native_sql_strict = native_sql_strict
         self._auto_sync_on_evaluate = auto_sync_on_evaluate
         self.last_native_fallback_reason: str | None = None
 
     def _use_native_sql(self) -> bool:
         if self._native_sql_enabled is not None:
             return self._native_sql_enabled
-        import os
-
         return os.environ.get("DOXA_POSTGRES_NATIVE_SQL") == "1"
+
+    def _strict_native_sql(self) -> bool:
+        if self._native_sql_strict is not None:
+            return self._native_sql_strict
+        return os.environ.get("DOXA_POSTGRES_NATIVE_SQL_STRICT") == "1"
+
+    def _handle_native_fallback(self, reason: str) -> None:
+        self.last_native_fallback_reason = reason
+        if self._strict_native_sql():
+            raise PostgresNativeFallbackError(
+                "Postgres native SQL fallback is disabled in strict mode: "
+                f"{reason}"
+            )
 
     @property
     def info(self) -> EngineInfo:
@@ -159,14 +185,17 @@ class PostgresQueryEngine(QueryEngine):
         if self._use_native_sql():
             supported, reason = probe_native_support(branch, query)
             if not supported:
-                self.last_native_fallback_reason = reason
+                self._handle_native_fallback(reason or "native SQL support probe failed")
             else:
-                self.last_native_fallback_reason = None
-            native_result = try_evaluate_native(
-                self._repo.get_connection(), branch, query
-            )
-            if native_result is not None:
-                return native_result
+                native_result = try_evaluate_native(
+                    self._repo.get_connection(), branch, query
+                )
+                if native_result is not None:
+                    self.last_native_fallback_reason = None
+                    return native_result
+                self._handle_native_fallback(
+                    "native SQL evaluator returned no result for a supported query"
+                )
 
         # ── Fast path: load only visible records from PostgreSQL ──────
         records = self._repo.get_visible_belief_records(
