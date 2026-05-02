@@ -116,8 +116,7 @@ class PostgresQueryEngine(QueryEngine):
         self.last_native_fallback_reason = reason
         if self._strict_native_sql():
             raise PostgresNativeFallbackError(
-                "Postgres native SQL fallback is disabled in strict mode: "
-                f"{reason}"
+                f"Postgres native SQL fallback is disabled in strict mode: {reason}"
             )
 
     @property
@@ -185,7 +184,9 @@ class PostgresQueryEngine(QueryEngine):
         if self._use_native_sql():
             supported, reason = probe_native_support(branch, query)
             if not supported:
-                self._handle_native_fallback(reason or "native SQL support probe failed")
+                self._handle_native_fallback(
+                    reason or "native SQL support probe failed"
+                )
             else:
                 native_result = try_evaluate_native(
                     self._repo.get_connection(), branch, query

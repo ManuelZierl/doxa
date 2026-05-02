@@ -52,7 +52,10 @@ def test_postgres_native_sql_strict_rejects_constraint_fallback(monkeypatch):
     with pytest.raises(PostgresNativeFallbackError, match="constraints"):
         engine.evaluate(branch, query)
 
-    assert engine.last_native_fallback_reason == "constraints are not supported by native SQL"
+    assert (
+        engine.last_native_fallback_reason
+        == "constraints are not supported by native SQL"
+    )
     assert repo.connection_requested is False
     assert repo.visible_records_requested is False
 
@@ -76,7 +79,10 @@ def test_postgres_native_sql_records_non_strict_fallback_reason():
 
     result = engine.evaluate(branch, query)
 
-    assert engine.last_native_fallback_reason == "constraints are not supported by native SQL"
+    assert (
+        engine.last_native_fallback_reason
+        == "constraints are not supported by native SQL"
+    )
     assert repo.connection_requested is False
     assert repo.visible_records_requested is True
     assert result.answers
