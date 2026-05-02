@@ -374,6 +374,23 @@ impl EdbStore {
         Ok(preds)
     }
 
+    /// Return the set of branch names that appear anywhere in the event log.
+    ///
+    /// This makes the EDB the authoritative source for branch discovery:
+    /// any branch that ever had events appended to it is listed here, even
+    /// if higher-level metadata (snapshots, indexes) has been lost.
+    pub fn list_branches(&self) -> Result<Vec<String>> {
+        let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+        for item in self.event_tree.iter() {
+            let (_, val_bytes) = item?;
+            let event: EdbEvent = bincode::deserialize(val_bytes.as_ref())?;
+            names.insert(event.branch().to_string());
+        }
+
+        Ok(names.into_iter().collect())
+    }
+
     /// Return the current watermark (highest event ID written).
     pub fn current_watermark(&self) -> Result<EventId> {
         let next = u64::from_be_bytes(

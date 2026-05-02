@@ -166,6 +166,11 @@ impl EngineSession {
         branch: &str,
         max_depth: Option<usize>,
     ) -> Result<EvalResult> {
+        // 0. Capture EDB watermark *before* loading events so the recorded
+        //    IDB watermark is a conservative lower bound: any event newer
+        //    than this will show up as "IDB stale" on the next sync check.
+        let edb_watermark = self.edb.current_watermark()?;
+
         // 1. Load EDB facts
         let facts = self.edb.get_facts(branch, None)?;
         let rules = self.edb.get_rules(branch, None)?;
@@ -193,7 +198,25 @@ impl EngineSession {
             max_depth,
         )?;
 
+        // 5. Record IDB watermark: the materialized state now reflects EDB
+        //    events up to `edb_watermark`. This is the IDB's own "how
+        //    up-to-date am I?" marker, queryable via `idb_watermark()`.
+        self.idb.set_branch_watermark(branch, edb_watermark)?;
+
         Ok(result)
+    }
+
+    /// Return the EDB event-id that the IDB has been materialized up to
+    /// for `branch`, or `None` if materialization has not been recorded
+    /// for this branch yet.
+    pub fn idb_watermark(&self, branch: &str) -> Result<Option<u64>> {
+        Ok(self.idb.get_branch_watermark(branch)?)
+    }
+
+    /// Return the EDB's current watermark (highest event id in the log).
+    /// Combined with `idb_watermark`, callers can detect stale IDB state.
+    pub fn edb_watermark(&self) -> Result<u64> {
+        Ok(self.edb.current_watermark()?)
     }
 
     /// Load ground facts from the EDB into the IDB as base contributions.

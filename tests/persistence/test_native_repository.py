@@ -11,6 +11,10 @@ class _FakeNativeStore:
         self.edb_path = edb_path
         self.idb_path = idb_path
         self._sym_to_id: dict[str, int] = {}
+        self.assert_fact_calls = 0
+        self.add_rule_calls = 0
+        self.add_constraint_calls = 0
+        self.flush_calls = 0
 
     def intern(self, text: str) -> int:
         if text not in self._sym_to_id:
@@ -24,18 +28,22 @@ class _FakeNativeStore:
         return None
 
     def assert_fact(self, *args, **kwargs):
+        self.assert_fact_calls += 1
         return 0
 
     def add_rule(self, *args, **kwargs):
+        self.add_rule_calls += 1
         return 0
 
     def add_constraint(self, *args, **kwargs):
+        self.add_constraint_calls += 1
         return 0
 
     def get_facts(self, branch_name: str):
         return []
 
     def flush(self) -> None:
+        self.flush_calls += 1
         return None
 
 
@@ -120,3 +128,49 @@ def test_native_repo_persists_branch_index_across_restarts(tmp_path: Path, monke
     loaded = repo2.get("main")
     assert loaded is not None
     assert loaded.to_doxa() == branch.to_doxa()
+
+
+def test_native_repo_add_constraint_is_incremental(tmp_path: Path, monkeypatch):
+    repo = _make_repo(tmp_path, monkeypatch)
+    branch = Branch.from_doxa(
+        """
+        pred p/1.
+        p(a).
+        """
+    )
+    repo.save(branch)
+    base_constraint_calls = repo._store.add_constraint_calls
+    base_fact_calls = repo._store.assert_fact_calls
+    base_rule_calls = repo._store.add_rule_calls
+
+    constraint = Branch.from_doxa("!:- p(a). ").constraints[0]
+    repo.add_constraint("main", constraint)
+
+    assert repo._store.add_constraint_calls == base_constraint_calls + 1
+    assert repo._store.assert_fact_calls == base_fact_calls
+    assert repo._store.add_rule_calls == base_rule_calls
+
+
+def test_native_repo_incremental_mutations_flush_store(tmp_path: Path, monkeypatch):
+    repo = _make_repo(tmp_path, monkeypatch)
+    branch = Branch.from_doxa(
+        """
+        pred p/1.
+        p(a).
+        """
+    )
+    repo.save(branch)
+
+    base_flush_calls = repo._store.flush_calls
+
+    belief = Branch.from_doxa("p(b). ").belief_records[0]
+    repo.add_belief_record("main", belief)
+    assert repo._store.flush_calls == base_flush_calls + 1
+
+    rule = Branch.from_doxa("q(X) :- p(X). ").rules[0]
+    repo.add_rule("main", rule)
+    assert repo._store.flush_calls == base_flush_calls + 2
+
+    constraint = Branch.from_doxa("!:- p(a). ").constraints[0]
+    repo.add_constraint("main", constraint)
+    assert repo._store.flush_calls == base_flush_calls + 3

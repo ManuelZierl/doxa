@@ -8,12 +8,24 @@ Usage
   doxa --memory postgres                Use PostgreSQL backend
   doxa --engine postgres                Use PostgreSQL query engine
   doxa --memory postgres --engine postgres
+  doxa --edb native --idb native        Same as --memory native (new, EDB/IDB-explicit)
   doxa --file knowledge.doxa            Pre-load a file before starting
   doxa --file a.doxa --file b.json      Pre-load and merge multiple files
   doxa extract-prompt <resource>        Generate extraction prompt
   doxa query-prompt <question>          Generate query planner prompt
   doxa --version                        Print version and exit
   doxa --help                           Print this help and exit
+
+Flag aliases
+------------
+``--edb`` and ``--idb`` are additive synonyms for ``--memory`` and
+``--engine`` respectively.  They reflect Doxa's architecture more
+honestly (the "memory" in ``--memory`` is really the Extensional DB; the
+"engine" in ``--engine`` is really the Intensional-DB materialiser).
+
+The existing ``--memory`` / ``--engine`` flags remain supported for
+backwards compatibility.  See ``doxa/docs/adr/0001-edb-source-of-truth.md``
+for the rationale.
 """
 
 from __future__ import annotations
@@ -146,12 +158,36 @@ def _make_engine(engine_kind: str, repo=None):
     show_default=False,
 )
 @click.option(
+    "--edb",
+    "edb_kind",
+    default=None,
+    type=click.Choice(MEMORY_KINDS, case_sensitive=False),
+    metavar="BACKEND",
+    help=(
+        "EDB (Extensional Database) backend — additive synonym for "
+        f"--memory. [{', '.join(MEMORY_KINDS)}]."
+    ),
+    show_default=False,
+)
+@click.option(
     "--engine",
     "engine_kind",
     default=None,
     type=click.Choice(ENGINE_KINDS, case_sensitive=False),
     metavar="ENGINE",
     help=f"Query engine [{', '.join(ENGINE_KINDS)}]. Default: matches --memory.",
+    show_default=False,
+)
+@click.option(
+    "--idb",
+    "idb_kind",
+    default=None,
+    type=click.Choice(ENGINE_KINDS, case_sensitive=False),
+    metavar="ENGINE",
+    help=(
+        "IDB (Intensional Database) / materialiser backend — additive "
+        f"synonym for --engine. [{', '.join(ENGINE_KINDS)}]."
+    ),
     show_default=False,
 )
 @click.option(
@@ -168,7 +204,9 @@ def cli(
     ctx: click.Context,
     tmp: bool,
     memory_kind: str | None,
+    edb_kind: str | None,
     engine_kind: str | None,
+    idb_kind: str | None,
     files: tuple[Path, ...],
 ) -> None:
     """Doxa — interactive knowledge-base terminal and utilities."""
@@ -177,10 +215,25 @@ def cli(
     if ctx.invoked_subcommand is not None:
         return
 
-    # --tmp forces in-memory regardless of --memory
+    # Resolve --edb / --idb as additive synonyms for --memory / --engine.
+    # Mixing both on the same side is a usage error unless they agree.
+    if edb_kind is not None:
+        if memory_kind is not None and memory_kind != edb_kind:
+            raise click.UsageError(
+                f"--memory {memory_kind!r} and --edb {edb_kind!r} disagree; pick one."
+            )
+        memory_kind = edb_kind
+    if idb_kind is not None:
+        if engine_kind is not None and engine_kind != idb_kind:
+            raise click.UsageError(
+                f"--engine {engine_kind!r} and --idb {idb_kind!r} disagree; pick one."
+            )
+        engine_kind = idb_kind
+
+    # --tmp forces in-memory regardless of --memory / --edb
     if tmp:
         if memory_kind is not None and memory_kind != "memory":
-            raise click.UsageError("--tmp and --memory are mutually exclusive.")
+            raise click.UsageError("--tmp and --memory/--edb are mutually exclusive.")
         memory_kind = "memory"
 
     # Apply defaults

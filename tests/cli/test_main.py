@@ -59,6 +59,52 @@ def test_cli_tmp_conflicts_with_memory() -> None:
     assert "mutually exclusive" in result.output.lower()
 
 
+def test_cli_edb_alias_for_memory() -> None:
+    """``--edb`` is an additive synonym for ``--memory`` — wired the same
+    way through ``_make_repo``."""
+    runner = CliRunner()
+
+    with patch("doxa.cli.terminal.run_terminal") as mock_run:
+        with patch("doxa.cli.main._make_repo") as mock_repo:
+            with patch("doxa.cli.main._make_engine") as mock_engine:
+                mock_repo.return_value = MagicMock()
+                mock_engine.return_value = MagicMock()
+
+                result = runner.invoke(cli, ["--edb", "memory"], input="\n")
+
+                assert result.exit_code == 0, result.output
+                mock_run.assert_called_once()
+                assert mock_run.call_args.kwargs["memory_kind"] == "memory"
+
+
+def test_cli_idb_alias_for_engine() -> None:
+    """``--idb`` is an additive synonym for ``--engine``."""
+    runner = CliRunner()
+
+    with patch("doxa.cli.terminal.run_terminal") as mock_run:
+        with patch("doxa.cli.main._make_repo") as mock_repo:
+            with patch("doxa.cli.main._make_engine") as mock_engine:
+                mock_repo.return_value = MagicMock()
+                mock_engine.return_value = MagicMock()
+
+                result = runner.invoke(
+                    cli, ["--edb", "memory", "--idb", "memory"], input="\n"
+                )
+
+                assert result.exit_code == 0, result.output
+                mock_run.assert_called_once()
+                assert mock_run.call_args.kwargs["engine_kind"] == "memory"
+
+
+def test_cli_edb_memory_conflict_is_usage_error() -> None:
+    """Specifying both ``--memory`` and ``--edb`` with disagreeing values
+    is rejected rather than silently picking one."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--memory", "memory", "--edb", "native"], input="\n")
+    assert result.exit_code != 0
+    assert "disagree" in result.output.lower()
+
+
 def test_cli_memory_backend_postgres() -> None:
     runner = CliRunner()
 

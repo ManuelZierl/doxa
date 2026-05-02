@@ -10,6 +10,7 @@ from doxa.core._parsing.parsing_utils import (
     parse_date_literal,
     parse_datetime_literal,
     parse_duration_literal,
+    parse_python_string_literal,
 )
 from doxa.core.belief_record import BeliefEntityArg, BeliefLiteralArg, BeliefPredRefArg
 from doxa.core.branch import Branch
@@ -98,7 +99,11 @@ def _clean_resolved(text: str) -> Any:
     """
     # String literal: "hello world" → hello world
     if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
-        return text[1:-1]
+        try:
+            return parse_python_string_literal(text)
+        except ValueError:
+            # Defensive fallback for malformed stored strings.
+            return text[1:-1]
     # Date literal: d"2024-06-15"
     if (
         text.startswith('d"')

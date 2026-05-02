@@ -5,6 +5,12 @@ import pytest
 from doxa.core.branch import Branch
 from doxa.core.query import Query
 from doxa.query.evaluator import InMemoryQueryEngine
+from doxa.query.native import _clean_resolved
+
+
+def test_clean_resolved_unescapes_string_literals() -> None:
+    assert _clean_resolved('"line\\nvalue"') == "line\nvalue"
+    assert _clean_resolved('"quote: \\"x\\""') == 'quote: "x"'
 
 
 def _has_native() -> bool:

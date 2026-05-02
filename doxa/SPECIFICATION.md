@@ -492,6 +492,45 @@ Examples:
 ?- edge(_, _)
 ```
 
+## Storage and Runtime Semantics (v0.2)
+
+The language semantics above are backend-independent. Runtime/persistence behavior follows these architectural rules.
+
+### EDB and IDB
+
+* **EDB (Extensional Database)** is the durable source of truth for explicit epistemic events (facts, rules, constraints, retractions, declarations).
+* **IDB (Intensional Database)** is derived/materialized state used for evaluation/query performance.
+* The IDB must be rebuildable from the EDB.
+
+Operational invariant:
+
+* deleting IDB must not lose knowledge
+* deleting EDB does lose knowledge
+
+### Native persistence details
+
+For native local storage, repository snapshots may exist under native metadata directories as a cache/optimization for fast branch round-trip. They are not authoritative durability storage.
+
+If snapshot/index cache files are missing, branch reconstruction still proceeds from EDB events.
+
+### Watermark semantics
+
+Materialization progress is tracked with event-id watermarks:
+
+* `edb_watermark`: current EDB head event id
+* `idb_watermark(branch)`: EDB event id up to which the branch IDB has been materialized
+
+If `idb_watermark(branch) < edb_watermark`, the IDB is stale for that branch and must be synchronized before relying on fully up-to-date results.
+
+### CLI backend terminology
+
+CLI supports both legacy and architecture-explicit option names:
+
+* `--memory` (legacy) and `--edb` (alias)
+* `--engine` (legacy) and `--idb` (alias)
+
+The alias pairs are equivalent. If both members of a pair are provided, values must agree.
+
 ## Terminal Slash Commands
 
 Interactive-mode only. Prefix is `/-`.

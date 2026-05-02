@@ -105,6 +105,82 @@ fn parse_builtin_op(name: &str) -> PyResult<BuiltinOp> {
     }
 }
 
+/// Render a `BuiltinOp` back to the string key used on the Python side.
+fn builtin_op_name(op: &BuiltinOp) -> &'static str {
+    match op {
+        BuiltinOp::Eq => "eq",
+        BuiltinOp::Ne => "ne",
+        BuiltinOp::Lt => "lt",
+        BuiltinOp::Leq => "leq",
+        BuiltinOp::Gt => "gt",
+        BuiltinOp::Geq => "geq",
+        BuiltinOp::Add => "add",
+        BuiltinOp::Sub => "sub",
+        BuiltinOp::Mul => "mul",
+        BuiltinOp::Div => "div",
+        BuiltinOp::Between => "between",
+        BuiltinOp::Int => "int",
+        BuiltinOp::String => "string",
+        BuiltinOp::Float => "float",
+        BuiltinOp::Entity => "entity",
+        BuiltinOp::PredicateRef => "predicate_ref",
+        BuiltinOp::Date => "date",
+        BuiltinOp::DateTime => "datetime",
+        BuiltinOp::Duration => "duration",
+    }
+}
+
+/// Convert a Rust `Term` to a Python dict understood by the Python adapters.
+///
+/// Variables render as `{"Var": name}` and interned ground values as
+/// `{"Const": sym_id}` (matching the shape accepted by `py_to_term`).  Int,
+/// Float, and Str literals are flattened to typed Python values under
+/// `{"Int": i}`, `{"Float": f}`, `{"Str": sym_id}` so callers that persist
+/// rules can round-trip them verbatim.
+fn term_to_py<'py>(py: Python<'py>, term: &Term) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new_bound(py);
+    match term {
+        Term::Var(name) => d.set_item("Var", name)?,
+        Term::Entity(sym) => d.set_item("Const", *sym)?,
+        Term::Int(n) => d.set_item("Int", *n)?,
+        Term::Float(bits) => d.set_item("Float", f64::from_bits(*bits))?,
+        Term::Str(sym) => d.set_item("Str", *sym)?,
+    }
+    Ok(d)
+}
+
+/// Convert a Rust `Goal` to a Python dict with the same shape
+/// `py_to_goal` accepts on the write path.
+fn goal_to_py<'py>(py: Python<'py>, goal: &Goal) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new_bound(py);
+    match goal {
+        Goal::Atom(AtomGoal {
+            pred_name,
+            pred_arity,
+            negated,
+            args,
+        }) => {
+            d.set_item("pred_name", pred_name)?;
+            d.set_item("pred_arity", *pred_arity)?;
+            d.set_item("negated", *negated)?;
+            let args_list = PyList::empty_bound(py);
+            for a in args {
+                args_list.append(term_to_py(py, a)?)?;
+            }
+            d.set_item("args", args_list)?;
+        }
+        Goal::Builtin(BuiltinGoal { op, args }) => {
+            d.set_item("builtin_name", builtin_op_name(op))?;
+            let args_list = PyList::empty_bound(py);
+            for a in args {
+                args_list.append(term_to_py(py, a)?)?;
+            }
+            d.set_item("args", args_list)?;
+        }
+    }
+    Ok(d)
+}
+
 fn parse_rule_applicability(name: &str) -> PyResult<RuleApplicabilitySemantics> {
     match name {
         "body_truth_only" => Ok(RuleApplicabilitySemantics::BodyTruthOnly),
@@ -419,6 +495,113 @@ impl NativeStore {
         Ok(result)
     }
 
+    /// Return all rules for a branch, as structured Python dicts mirroring
+    /// the shape accepted by `add_rule`.
+    ///
+    /// Each element is::
+    ///
+    ///     {
+    ///         "id": u64,
+    ///         "head_pred_name": str,
+    ///         "head_pred_arity": int,
+    ///         "head_args": [term_dict, ...],
+    ///         "body":      [goal_dict, ...],
+    ///         "b": float,
+    ///         "d": float,
+    ///     }
+    ///
+    /// This is the read-side counterpart to `add_rule` and makes the EDB
+    /// the durable source of truth for rules: callers can recover every
+    /// rule ever asserted purely from the event log, without relying on
+    /// any snapshot cache.
+    #[pyo3(signature = (branch, watermark=None))]
+    fn get_rules<'py>(
+        &self,
+        py: Python<'py>,
+        branch: &str,
+        watermark: Option<u64>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let rules = self
+            .session
+            .edb
+            .get_rules(branch, watermark)
+            .map_err(to_py_err)?;
+
+        let result = PyList::empty_bound(py);
+        for rule in &rules {
+            let dict = PyDict::new_bound(py);
+            dict.set_item("id", rule.id)?;
+            dict.set_item("head_pred_name", &rule.head_pred_name)?;
+            dict.set_item("head_pred_arity", rule.head_pred_arity)?;
+
+            let head_args = PyList::empty_bound(py);
+            for t in &rule.head_args {
+                head_args.append(term_to_py(py, t)?)?;
+            }
+            dict.set_item("head_args", head_args)?;
+
+            let body = PyList::empty_bound(py);
+            for g in &rule.body {
+                body.append(goal_to_py(py, g)?)?;
+            }
+            dict.set_item("body", body)?;
+
+            dict.set_item("b", rule.b)?;
+            dict.set_item("d", rule.d)?;
+            result.append(dict)?;
+        }
+        Ok(result)
+    }
+
+    /// Return all constraints for a branch, as structured Python dicts
+    /// mirroring the shape accepted by `add_constraint`.
+    ///
+    /// Each element is::
+    ///
+    ///     {"id": u64, "body": [goal_dict, ...], "b": float, "d": float}
+    ///
+    /// Same source-of-truth contract as `get_rules`.
+    #[pyo3(signature = (branch, watermark=None))]
+    fn get_constraints<'py>(
+        &self,
+        py: Python<'py>,
+        branch: &str,
+        watermark: Option<u64>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let constraints = self
+            .session
+            .edb
+            .get_constraints(branch, watermark)
+            .map_err(to_py_err)?;
+
+        let result = PyList::empty_bound(py);
+        for c in &constraints {
+            let dict = PyDict::new_bound(py);
+            dict.set_item("id", c.id)?;
+            let body = PyList::empty_bound(py);
+            for g in &c.goals {
+                body.append(goal_to_py(py, g)?)?;
+            }
+            dict.set_item("body", body)?;
+            dict.set_item("b", c.b)?;
+            dict.set_item("d", c.d)?;
+            result.append(dict)?;
+        }
+        Ok(result)
+    }
+
+    /// Return the sorted list of branch names discovered in the EDB
+    /// event log.
+    ///
+    /// This makes the EDB authoritative for branch discovery: a branch
+    /// that was ever written to the EDB can be enumerated here even if
+    /// every other piece of metadata (snapshots, indexes, caches) is
+    /// lost. Used by `NativeBranchRepository.list_names()` to recover
+    /// from missing or corrupt snapshot indexes.
+    fn list_branches(&self) -> PyResult<Vec<String>> {
+        self.session.edb.list_branches().map_err(to_py_err)
+    }
+
     /// Materialize: load EDB facts + rules, evaluate to fixpoint.
     /// Returns a dict with evaluation stats.
     #[pyo3(signature = (branch, max_depth=None))]
@@ -487,6 +670,23 @@ impl NativeStore {
     /// Return the current EDB watermark.
     fn current_watermark(&self) -> PyResult<u64> {
         self.session.edb.current_watermark().map_err(to_py_err)
+    }
+
+    /// Return the EDB watermark (highest event id written). Alias of
+    /// `current_watermark`, spelled to make the source-of-truth contract
+    /// explicit at the call site.
+    fn edb_watermark(&self) -> PyResult<u64> {
+        self.session.edb_watermark().map_err(to_py_err)
+    }
+
+    /// Return the IDB materialization watermark for `branch`, or `None`
+    /// if the IDB has never been materialized for this branch.
+    ///
+    /// The IDB watermark is the EDB event id up to which the IDB has
+    /// been synced. Callers can compare it with `edb_watermark()` to
+    /// decide whether the IDB is stale.
+    fn idb_watermark(&self, branch: &str) -> PyResult<Option<u64>> {
+        self.session.idb_watermark(branch).map_err(to_py_err)
     }
 
     /// Flush all stores to disk.

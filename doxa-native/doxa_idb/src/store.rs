@@ -299,6 +299,11 @@ pub struct DoxaStore {
     contrib_tree: Tree,
     /// Cached handles for secondary index trees, keyed by tree name.
     index_trees: RwLock<HashMap<String, Tree>>,
+    /// Tree storing per-branch materialization watermarks. Keys are branch
+    /// names (UTF-8), values are 8-byte big-endian `EventId`s. This records
+    /// the EDB event up to which the IDB has been materialized for each
+    /// branch — the IDB's own notion of "how up-to-date am I?".
+    branch_watermark: Tree,
 }
 
 impl DoxaStore {
@@ -320,6 +325,7 @@ impl DoxaStore {
         let predicate_registry = PredicateRegistry::new(&db)?;
         let state_tree = db.open_tree("state")?;
         let contrib_tree = db.open_tree("contrib")?;
+        let branch_watermark = db.open_tree("branch_watermark")?;
         Ok(DoxaStore {
             db,
             symbol_store,
@@ -327,6 +333,7 @@ impl DoxaStore {
             state_tree,
             contrib_tree,
             index_trees: RwLock::new(HashMap::new()),
+            branch_watermark,
         })
     }
 
@@ -335,7 +342,39 @@ impl DoxaStore {
     pub fn flush_all(&self) -> Result<()> {
         self.state_tree.flush()?;
         self.contrib_tree.flush()?;
+        self.branch_watermark.flush()?;
         self.db.flush()?;
+        Ok(())
+    }
+
+    /// Return the EDB event-id watermark up to which this IDB has been
+    /// materialized for `branch`, or `None` if materialization has never
+    /// been recorded for that branch.
+    ///
+    /// This is the IDB's own notion of "how far am I synced to the EDB?".
+    /// Callers can compare it with the EDB's `current_watermark()` to
+    /// decide whether a query can be answered from the IDB directly or
+    /// whether materialization must run first.
+    pub fn get_branch_watermark(&self, branch: &str) -> Result<Option<u64>> {
+        let raw = self.branch_watermark.get(branch.as_bytes())?;
+        Ok(raw.and_then(|bytes| {
+            let arr: [u8; 8] = bytes.as_ref().try_into().ok()?;
+            Some(u64::from_be_bytes(arr))
+        }))
+    }
+
+    /// Record that this IDB has been materialized up to EDB event `wm`
+    /// for `branch`.
+    pub fn set_branch_watermark(&self, branch: &str, wm: u64) -> Result<()> {
+        self.branch_watermark
+            .insert(branch.as_bytes(), wm.to_be_bytes().as_slice())?;
+        Ok(())
+    }
+
+    /// Clear the recorded watermark for `branch`. Useful when the IDB is
+    /// wiped or when callers want to force a full rebuild.
+    pub fn clear_branch_watermark(&self, branch: &str) -> Result<()> {
+        self.branch_watermark.remove(branch.as_bytes())?;
         Ok(())
     }
 

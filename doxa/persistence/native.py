@@ -1,10 +1,27 @@
-"""Native Rust-backed persistence backend using doxa-native (sled + EDB)."""
+"""Native Rust-backed persistence backend using doxa-native (sled + EDB).
+
+**EDB source-of-truth contract.**
+
+The native EDB (the append-only event log inside ``doxa-native/doxa_edb``)
+is the durable source of truth for every asserted belief record, rule,
+and constraint.  The JSON ``Branch`` snapshot that this repository also
+writes under ``<edb_path>/.doxa_native_repo/`` is a cache/optimisation:
+it speeds up branch reconstruction but is never authoritative.
+
+Deleting any of the following must **never** lose durable knowledge:
+
+* the JSON snapshot (``.doxa_native_repo``)
+* the IDB directory (sled-backed derived/materialised state)
+
+The only directory whose removal loses knowledge is the EDB itself.  This
+is verified by the regression tests in
+``tests/persistence/test_native_edb_source_of_truth.py``.
+"""
 
 from __future__ import annotations
 
 import importlib
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 from urllib.parse import quote
@@ -18,6 +35,7 @@ from doxa.core.belief_record import (
     BeliefRecord,
 )
 from doxa.core.branch import Branch
+from doxa.core.constraint import Constraint
 from doxa.core.goal import (
     AtomGoal,
     BuiltinGoal,
@@ -192,29 +210,41 @@ class NativeBranchRepository(BranchRepository):
     def _head_arg_to_term(self, arg) -> object:
         """Convert a Python RuleHeadArg to a term for the Rust side.
 
-        Variables → str (uppercase), ground values → SymId (int).
+        Variables → str (uppercase), ground values → SymId (int).  Ground
+        values are tagged with ``ent:`` / ``lit:`` / ``predref:`` prefixes
+        so their original Python type can be recovered when reading rules
+        back from the EDB event log (see `_head_arg_from_text`).  The
+        prefix scheme matches the one used by `_intern_belief_arg`; this
+        is what makes the EDB a true source of truth for rules.
         """
         if isinstance(arg, RuleHeadVarArg):
             return arg.var.name  # str starting with uppercase
         elif isinstance(arg, RuleHeadEntityArg):
-            return self._store.intern(arg.ent_name)
+            return self._store.intern(f"{_ENC_ENT}{arg.ent_name}")
         elif isinstance(arg, RuleHeadLiteralArg):
-            return self._store.intern(arg.to_doxa())
+            return self._store.intern(f"{_ENC_LIT}{arg.to_doxa()}")
         elif isinstance(arg, RuleHeadPredRefArg):
-            return self._store.intern(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
+            return self._store.intern(
+                f"{_ENC_PRED_REF}{arg.pred_ref_name}/{arg.pred_ref_arity}"
+            )
         else:
             raise TypeError(f"Unknown head arg type: {type(arg)}")
 
     def _goal_arg_to_term(self, arg) -> object:
-        """Convert a Python RuleGoalArg to a term for the Rust side."""
+        """Convert a Python RuleGoalArg to a term for the Rust side.
+
+        Same tagging scheme as `_head_arg_to_term` — see its docstring.
+        """
         if isinstance(arg, RuleGoalVarArg):
             return arg.var.name
         elif isinstance(arg, RuleGoalEntityArg):
-            return self._store.intern(arg.ent_name)
+            return self._store.intern(f"{_ENC_ENT}{arg.ent_name}")
         elif isinstance(arg, RuleGoalLiteralArg):
-            return self._store.intern(arg.to_doxa())
+            return self._store.intern(f"{_ENC_LIT}{arg.to_doxa()}")
         elif isinstance(arg, RuleGoalPredRefArg):
-            return self._store.intern(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
+            return self._store.intern(
+                f"{_ENC_PRED_REF}{arg.pred_ref_name}/{arg.pred_ref_arity}"
+            )
         else:
             raise TypeError(f"Unknown goal arg type: {type(arg)}")
 
@@ -236,14 +266,17 @@ class NativeBranchRepository(BranchRepository):
             raise TypeError(f"Unknown goal type: {type(goal)}")
 
     def _constraint_goal_arg_to_term(self, arg) -> object:
+        """Same tagging scheme as `_head_arg_to_term` — see its docstring."""
         if isinstance(arg, VarArg):
             return arg.var.name
         elif isinstance(arg, EntityArg):
-            return self._store.intern(arg.ent_name)
+            return self._store.intern(f"{_ENC_ENT}{arg.ent_name}")
         elif isinstance(arg, LiteralArg):
-            return self._store.intern(arg.to_doxa())
+            return self._store.intern(f"{_ENC_LIT}{arg.to_doxa()}")
         elif isinstance(arg, PredRefArg):
-            return self._store.intern(f"{arg.pred_ref_name}/{arg.pred_ref_arity}")
+            return self._store.intern(
+                f"{_ENC_PRED_REF}{arg.pred_ref_name}/{arg.pred_ref_arity}"
+            )
         else:
             raise TypeError(f"Unknown constraint goal arg type: {type(arg)}")
 
@@ -264,59 +297,291 @@ class NativeBranchRepository(BranchRepository):
             raise TypeError(f"Unknown constraint goal type: {type(goal)}")
 
     # ------------------------------------------------------------------
-    # Core CRUD
+    # EDB → Python reconstruction helpers
     # ------------------------------------------------------------------
 
-    def get(self, name: str) -> Optional[Branch]:
-        if name not in self._known_branches:
-            return None
+    def _resolve_tagged_text(self, sym_id: int) -> str:
+        text = self._store.resolve(sym_id)
+        return text if text is not None else str(sym_id)
 
-        # Fast path: exact branch round-trip from persisted snapshot.
-        snapshot = self._load_snapshot(name)
-        if snapshot is not None:
-            return snapshot
+    def _decode_head_arg_from_term(self, term: dict, pos: int):
+        """Decode a `{"Var": name}` / `{"Const": sym_id}` dict from
+        `get_rules` back to a `RuleHead*Arg` at position `pos`."""
+        if "Var" in term:
+            arg = RuleHeadVarArg.from_doxa(term["Var"])
+            return arg.model_copy(update={"pos": pos})
+        sym = term.get("Const")
+        if sym is None:
+            return RuleHeadEntityArg(
+                kind=BaseKind.rule_head_arg,
+                pos=pos,
+                term_kind=TermKind.ent,
+                ent_name=str(term),
+            )
+        text = self._resolve_tagged_text(sym)
+        if text.startswith(_ENC_ENT):
+            return RuleHeadEntityArg(
+                kind=BaseKind.rule_head_arg,
+                pos=pos,
+                term_kind=TermKind.ent,
+                ent_name=text[len(_ENC_ENT) :],
+            )
+        if text.startswith(_ENC_LIT):
+            arg = RuleHeadLiteralArg.from_doxa(text[len(_ENC_LIT) :])
+            return arg.model_copy(update={"pos": pos})
+        if text.startswith(_ENC_PRED_REF):
+            arg = RuleHeadPredRefArg.from_doxa(text[len(_ENC_PRED_REF) :])
+            return arg.model_copy(update={"pos": pos})
+        return RuleHeadEntityArg(
+            kind=BaseKind.rule_head_arg,
+            pos=pos,
+            term_kind=TermKind.ent,
+            ent_name=text,
+        )
 
-        # Reconstruct Branch from EDB events
+    def _decode_rule_goal_arg_from_term(self, term: dict, pos: int):
+        if "Var" in term:
+            arg = RuleGoalVarArg.from_doxa(term["Var"])
+            return arg.model_copy(update={"pos": pos})
+        sym = term.get("Const")
+        if sym is None:
+            return RuleGoalEntityArg(
+                kind=BaseKind.rule_goal_arg,
+                pos=pos,
+                term_kind=TermKind.ent,
+                ent_name=str(term),
+            )
+        text = self._resolve_tagged_text(sym)
+        if text.startswith(_ENC_ENT):
+            return RuleGoalEntityArg(
+                kind=BaseKind.rule_goal_arg,
+                pos=pos,
+                term_kind=TermKind.ent,
+                ent_name=text[len(_ENC_ENT) :],
+            )
+        if text.startswith(_ENC_LIT):
+            arg = RuleGoalLiteralArg.from_doxa(text[len(_ENC_LIT) :])
+            return arg.model_copy(update={"pos": pos})
+        if text.startswith(_ENC_PRED_REF):
+            arg = RuleGoalPredRefArg.from_doxa(text[len(_ENC_PRED_REF) :])
+            return arg.model_copy(update={"pos": pos})
+        return RuleGoalEntityArg(
+            kind=BaseKind.rule_goal_arg,
+            pos=pos,
+            term_kind=TermKind.ent,
+            ent_name=text,
+        )
+
+    def _decode_constraint_goal_arg_from_term(self, term: dict, pos: int):
+        if "Var" in term:
+            arg = VarArg.from_doxa(term["Var"])
+            return arg.model_copy(update={"pos": pos})
+        sym = term.get("Const")
+        if sym is None:
+            return EntityArg(
+                kind=BaseKind.goal_arg,
+                pos=pos,
+                term_kind="ent",
+                ent_name=str(term),
+            )
+        text = self._resolve_tagged_text(sym)
+        if text.startswith(_ENC_ENT):
+            return EntityArg(
+                kind=BaseKind.goal_arg,
+                pos=pos,
+                term_kind="ent",
+                ent_name=text[len(_ENC_ENT) :],
+            )
+        if text.startswith(_ENC_LIT):
+            arg = LiteralArg.from_doxa(text[len(_ENC_LIT) :])
+            return arg.model_copy(update={"pos": pos})
+        if text.startswith(_ENC_PRED_REF):
+            arg = PredRefArg.from_doxa(text[len(_ENC_PRED_REF) :])
+            return arg.model_copy(update={"pos": pos})
+        return EntityArg(
+            kind=BaseKind.goal_arg,
+            pos=pos,
+            term_kind="ent",
+            ent_name=text,
+        )
+
+    def _decode_rule_from_dict(self, raw: dict, idx: int) -> Rule:
+        from doxa.core.builtins import Builtin
+        from doxa.core.goal_kinds import GoalKind
+
+        body_goals = []
+        for body_idx, g in enumerate(raw.get("body", [])):
+            if "builtin_name" in g:
+                body_goals.append(
+                    RuleBuiltinGoal(
+                        kind=BaseKind.rule_goal,
+                        goal_kind=GoalKind.builtin,
+                        idx=body_idx,
+                        builtin_name=Builtin(g["builtin_name"]),
+                        goal_args=[
+                            self._decode_rule_goal_arg_from_term(a, i)
+                            for i, a in enumerate(g.get("args", []))
+                        ],
+                    )
+                )
+            else:
+                body_goals.append(
+                    RuleAtomGoal(
+                        kind=BaseKind.rule_goal,
+                        goal_kind=GoalKind.atom,
+                        idx=body_idx,
+                        pred_name=g["pred_name"],
+                        pred_arity=g["pred_arity"],
+                        negated=g.get("negated", False),
+                        goal_args=[
+                            self._decode_rule_goal_arg_from_term(a, i)
+                            for i, a in enumerate(g.get("args", []))
+                        ],
+                    )
+                )
+        return Rule(
+            kind=BaseKind.rule,
+            head_pred_name=raw["head_pred_name"],
+            head_pred_arity=raw["head_pred_arity"],
+            head_args=[
+                self._decode_head_arg_from_term(a, i)
+                for i, a in enumerate(raw.get("head_args", []))
+            ],
+            goals=body_goals,
+            b=raw.get("b", 1.0),
+            d=raw.get("d", 0.0),
+            name=None,
+            description=None,
+        )
+
+    def _decode_constraint_from_dict(self, raw: dict, idx: int) -> Constraint:
+        from doxa.core.builtins import Builtin
+        from doxa.core.goal_kinds import GoalKind
+
+        body_goals = []
+        for body_idx, g in enumerate(raw.get("body", [])):
+            if "builtin_name" in g:
+                body_goals.append(
+                    BuiltinGoal(
+                        kind=BaseKind.goal,
+                        goal_kind=GoalKind.builtin,
+                        idx=body_idx,
+                        builtin_name=Builtin(g["builtin_name"]),
+                        goal_args=[
+                            self._decode_constraint_goal_arg_from_term(a, i)
+                            for i, a in enumerate(g.get("args", []))
+                        ],
+                    )
+                )
+            else:
+                body_goals.append(
+                    AtomGoal(
+                        kind=BaseKind.goal,
+                        goal_kind=GoalKind.atom,
+                        idx=body_idx,
+                        pred_name=g["pred_name"],
+                        pred_arity=g["pred_arity"],
+                        negated=g.get("negated", False),
+                        goal_args=[
+                            self._decode_constraint_goal_arg_from_term(a, i)
+                            for i, a in enumerate(g.get("args", []))
+                        ],
+                    )
+                )
+        return Constraint(
+            kind=BaseKind.constraint,
+            goals=body_goals,
+            b=raw.get("b", 1.0),
+            d=raw.get("d", 0.0),
+            name=None,
+            description=None,
+        )
+
+    def _reconstruct_branch_from_edb(self, name: str) -> Branch:
+        """Rebuild a full `Branch` from the EDB event log alone.
+
+        This is the true source-of-truth path: even if the JSON snapshot is
+        lost, any belief record, rule, or constraint ever asserted for
+        `name` is recovered from the append-only Rust event log.
+        """
         facts_raw = self._store.get_facts(name)
         belief_records: List[BeliefRecord] = []
-
         for fact in facts_raw:
             args = [
                 self._resolve_belief_arg(sym_id, fact["pred_name"], i)
                 for i, sym_id in enumerate(fact["args"])
             ]
-            record = BeliefRecord(
-                kind=BaseKind.belief_record,
-                created_at=datetime.now(timezone.utc),
-                updated_at=None,
-                pred_name=fact["pred_name"],
-                pred_arity=fact["pred_arity"],
-                args=args,
-                b=fact["b"],
-                d=fact["d"],
-                src=fact.get("source"),
-                vf=None,
-                vt=None,
-                name=None,
-                description=None,
+            belief_records.append(
+                BeliefRecord(
+                    kind=BaseKind.belief_record,
+                    pred_name=fact["pred_name"],
+                    pred_arity=fact["pred_arity"],
+                    args=args,
+                    b=fact["b"],
+                    d=fact["d"],
+                    src=fact.get("source"),
+                    vf=None,
+                    vt=None,
+                    name=None,
+                    description=None,
+                )
             )
-            belief_records.append(record)
 
-        # Fallback mode for legacy stores without snapshots.
-        # New saves always persist full branch snapshots.
+        rules: List[Rule] = []
+        if hasattr(self._store, "get_rules"):
+            for idx, raw in enumerate(self._store.get_rules(name)):
+                rules.append(self._decode_rule_from_dict(raw, idx))
+
+        constraints: List[Constraint] = []
+        if hasattr(self._store, "get_constraints"):
+            for idx, raw in enumerate(self._store.get_constraints(name)):
+                constraints.append(self._decode_constraint_from_dict(raw, idx))
 
         return Branch(
             kind=BaseKind.branch,
-            created_at=datetime.now(timezone.utc),
-            updated_at=None,
             name=name,
             ephemeral=False,
             belief_records=belief_records,
-            rules=[],
-            constraints=[],
+            rules=rules,
+            constraints=constraints,
             predicates=[],
             entities=[],
         )
+
+    def _edb_known_branches(self) -> set[str]:
+        """Branch names discoverable from the EDB event log alone."""
+        if not hasattr(self._store, "list_branches"):
+            return set()
+        try:
+            return set(self._store.list_branches())
+        except Exception:
+            return set()
+
+    # ------------------------------------------------------------------
+    # Core CRUD
+    # ------------------------------------------------------------------
+
+    def get(self, name: str) -> Optional[Branch]:
+        # The EDB is the source of truth.  First, make sure we have
+        # noticed any branch whose snapshot/index entry is missing but
+        # whose events still exist on disk.
+        if name not in self._known_branches:
+            if name in self._edb_known_branches():
+                self._known_branches.add(name)
+                self._persist_index()
+            else:
+                return None
+
+        # Fast path: exact branch round-trip from persisted snapshot
+        # (carries entities / predicates / timestamps verbatim).
+        snapshot = self._load_snapshot(name)
+        if snapshot is not None:
+            return snapshot
+
+        # Snapshot is absent or corrupt — fall back to reconstructing
+        # the branch purely from the EDB event log.  This path must
+        # recover belief records, rules, and constraints.
+        return self._reconstruct_branch_from_edb(name)
 
     def save(self, branch: Branch) -> None:
         name = branch.name
@@ -379,8 +644,34 @@ class NativeBranchRepository(BranchRepository):
             snapshot.unlink()
         self._persist_index()
 
+    def close(self) -> None:
+        """Release the underlying native store and flush to disk.
+
+        Sled holds an OS file lock on its database directory for the
+        lifetime of the handle.  Callers that want to reopen the same path
+        in the same process must ``close()`` first (or let the repository
+        be garbage-collected).
+        """
+        store = getattr(self, "_store", None)
+        if store is not None:
+            try:
+                store.flush()
+            except Exception:
+                pass
+            self._store = None  # type: ignore[assignment]
+
     def list_names(self) -> List[str]:
-        return sorted(self._known_branches)
+        # Union snapshot-index with EDB-discovered branches so that
+        # losing the snapshot index does not hide branches whose events
+        # are still durably recorded in the EDB.
+        edb_names = self._edb_known_branches()
+        if edb_names - self._known_branches:
+            self._known_branches |= edb_names
+            try:
+                self._persist_index()
+            except OSError:
+                pass
+        return sorted(self._known_branches | edb_names)
 
     # ------------------------------------------------------------------
     # Fine-grained overrides for performance
@@ -404,6 +695,7 @@ class NativeBranchRepository(BranchRepository):
         if branch is not None:
             updated = self._append_belief_record_to_branch(branch, record)
             self._persist_snapshot(updated)
+        self._store.flush()
 
     def add_rule(self, branch_name: str, rule: Rule) -> None:
         if branch_name not in self._known_branches:
@@ -426,3 +718,23 @@ class NativeBranchRepository(BranchRepository):
         if branch is not None:
             updated = self._append_rule_to_branch(branch, rule)
             self._persist_snapshot(updated)
+        self._store.flush()
+
+    def add_constraint(self, branch_name: str, constraint: Constraint) -> None:
+        if branch_name not in self._known_branches:
+            raise KeyError(f"Branch not found: {branch_name!r}")
+
+        body = [self._constraint_goal_to_dict(g) for g in constraint.goals]
+        branch = self.get(branch_name)
+        constraint_id = len(branch.constraints) if branch is not None else 0
+        self._store.add_constraint(
+            branch_name,
+            constraint_id,
+            body,
+            constraint.b,
+            constraint.d,
+        )
+        if branch is not None:
+            updated = self._append_constraint_to_branch(branch, constraint)
+            self._persist_snapshot(updated)
+        self._store.flush()
