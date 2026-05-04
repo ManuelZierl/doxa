@@ -94,13 +94,13 @@ For the full formal syntax, semantics, builtins, query options, and edge cases s
 ## Install
 
 ```bash
-pip install doxa
+pip install doxa-lang
 ```
 
 Optional PostgreSQL dependencies:
 
 ```bash
-pip install "doxa[postgres]"
+pip install "doxa-lang[postgres]"
 ```
 
 For local development from source:
