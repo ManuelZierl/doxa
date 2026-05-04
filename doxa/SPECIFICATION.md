@@ -1,4 +1,4 @@
-# Doxa Language Specification - v0.2
+# Doxa Language Specification - v0.1
 
 Doxa is a Prolog/Datalog-inspired knowledge language with epistemic annotations.
 
@@ -492,7 +492,7 @@ Examples:
 ?- edge(_, _)
 ```
 
-## Storage and Runtime Semantics (v0.2)
+## Storage and Runtime Semantics (v0.1)
 
 The language semantics above are backend-independent. Runtime/persistence behavior follows these architectural rules.
 
