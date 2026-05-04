@@ -284,8 +284,37 @@ cli.add_command(query_prompt_command, name="query-prompt")
 cli.add_command(merge_command, name="merge")
 
 
+def _ensure_utf8_stdio() -> None:
+    """Reconfigure stdio to UTF-8 on Windows.
+
+    The default Windows console encoding (``cp1252``) cannot represent many
+    characters that legitimately occur in Doxa output (math symbols inside
+    JSON schemas, user-supplied entity names, etc.). Without this, commands
+    like ``doxa extract-prompt`` crash with ``UnicodeEncodeError`` on any
+    text containing non-cp1252 characters.
+
+    On non-Windows platforms this is a no-op; modern terminals already use
+    UTF-8 by default.
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except Exception:
+            # Best-effort; fall back to whatever the platform default is.
+            pass
+
+
 def main() -> None:
     """Setuptools entry point."""
+    _ensure_utf8_stdio()
     cli()
 
 
