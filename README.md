@@ -136,6 +136,8 @@ Prebuilt wheels are published for Linux/macOS/Windows on CPython 3.11-3.13. The 
 
 - `DOXA_POSTGRES_URL` (default: `postgresql://localhost/doxa`): PostgreSQL connection URL used by `--memory postgres`.
 - `DOXA_POSTGRES_NATIVE_SQL` (`1` to enable): route eligible PostgreSQL queries through the native SQL fast path.
+- `DOXA_POSTGRES_NATIVE_SQL_STRICT` (`1` to enable): fail instead of falling back to Python evaluation when a query cannot be executed via the native SQL fast path. Intended for testing and benchmarking coverage.
+- `DOXA_NATIVE_DIR` (optional): base directory for the `native` backend. When set, the EDB is stored under `<dir>/edb` and the IDB under `<dir>/idb`. When unset, a process-local temporary directory is used.
 
 ## Quick Start
 
