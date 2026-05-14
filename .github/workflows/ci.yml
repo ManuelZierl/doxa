@@ -347,12 +347,16 @@ jobs:
       - name: Smoke test built wheel
         shell: bash
         run: |
+          WHEEL_PATH="$(python -c 'import pathlib; print(next(pathlib.Path("dist").glob("*.whl")).resolve())')"
+          SMOKE_DIR="$(mktemp -d)"
+          pushd "$SMOKE_DIR"
           python -m venv .smoke-venv
           "${{ matrix.python_bin }}" -m pip install --upgrade pip
-          "${{ matrix.python_bin }}" -m pip install dist/*.whl
-          "${{ matrix.python_bin }}" -c "import doxa"
-          "${{ matrix.python_bin }}" -c "import doxa._native"
+          "${{ matrix.python_bin }}" -m pip install "$WHEEL_PATH"
+          "${{ matrix.python_bin }}" -I -c "import doxa; print(doxa.__file__)"
+          "${{ matrix.python_bin }}" -I -c "import doxa._native"
           "${{ matrix.cli_bin }}" --help
+          popd
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
