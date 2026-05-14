@@ -75,7 +75,7 @@ def _require_native() -> None:
     if doxa_native is None:
         raise ImportError(
             "doxa._native is not available. "
-            "Install a wheel with `pip install doxa`, or build from source with "
+            "Install a wheel with `pip install doxa-lang`, or build from source with "
             "`maturin develop --release` (requires Rust toolchain)."
         )
 
